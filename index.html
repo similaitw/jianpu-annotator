@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="上傳 MusicXML 五線譜，標註簡譜、唱名或音名，可切換首調或原調、播放，並匯出 MIDI 與 MusicXML。">
+<title>簡譜標註器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700&display=swap">
+<style>
+/* Layout: one column workbench — controls on top, the score as a sheet of paper, transport pinned to the bottom edge */
+:root {
+  --bg: #e9edf0;
+  --surface: #f8fafb;
+  --paper: #ffffff;
+  --ink: #18212b;
+  --muted: #5a6875;
+  --line: #ccd4db;
+  --accent: #1d5a85;
+  --accent-ink: #ffffff;
+  --pencil: #c0392b;
+  --font-ui: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-display: "Noto Serif TC", "Songti TC", "PMingLiU", serif;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161b; --surface: #1a2129; --paper: #f4f5f6; --ink: #e3e8ee; --muted: #94a2af;
+    --line: #2e3842; --accent: #6cb0de; --accent-ink: #0d1820; --pencil: #ff8a7a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11161b; --surface: #1a2129; --paper: #f4f5f6; --ink: #e3e8ee; --muted: #94a2af;
+  --line: #2e3842; --accent: #6cb0de; --accent-ink: #0d1820; --pencil: #ff8a7a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 120px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+h1 { font-family: var(--font-display); font-size: 1.7rem; margin: 0; letter-spacing: .02em; text-wrap: balance; }
+.tag { color: var(--muted); font-size: .9rem; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: grid; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.label { font-size: .78rem; letter-spacing: .08em; color: var(--muted); min-width: 3.2em; }
+button, .filebtn {
+  font: inherit; font-size: .92rem; border: 1px solid var(--line); background: var(--paper); color: #18212b;
+  border-radius: 8px; padding: 7px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+:root[data-theme="dark"] button, :root[data-theme="dark"] .filebtn { background: var(--surface); color: var(--ink); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button, :root:not([data-theme="light"]) .filebtn { background: var(--surface); color: var(--ink); } }
+button:hover, .filebtn:hover { border-color: var(--accent); }
+button:focus-visible, .filebtn:focus-within, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; color: var(--ink); padding: 6px 12px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.seg.off { opacity: .45; pointer-events: none; }
+.keybadge { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--pencil); border: 1px solid currentColor; border-radius: 6px; padding: 1px 8px; font-size: .9rem; }
+.meta { color: var(--muted); font-size: .88rem; min-width: 0; overflow-wrap: anywhere; }
+.note { color: var(--muted); font-size: .85rem; margin: 0; }
+.sheet { background: var(--paper); border-radius: var(--radius); border: 1px solid var(--line); overflow-x: auto; min-height: 240px; position: relative; }
+#osmd { min-width: 320px; }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; color: #5a6875; font-size: .95rem; padding: 20px; text-align: center; }
+.transport {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line);
+  padding-top: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.transport .inner { max-width: 1080px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.speed { display: flex; align-items: center; gap: 8px; font-size: .88rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.speed input { width: 120px; accent-color: var(--accent); }
+.toast { font-size: .86rem; color: var(--muted); margin-left: auto; min-width: 0; }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 20px; font-size: .86rem; color: var(--muted); }
+.legend b { color: var(--ink); font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>簡譜標註器</h1>
+    <span class="tag">五線譜 → 簡譜／唱名／音名 · 播放 · 匯出 MIDI</span>
+  </header>
+
+  <section class="panel" aria-label="樂譜與標註設定">
+    <div class="row">
+      <label class="filebtn" for="file">開啟樂譜<input id="file" type="file" accept=".musicxml,.xml,.mxl"></label>
+      <button id="sample" type="button">載入範例</button>
+      <span class="meta" id="fileinfo">範例：小星星（G 大調，含臨時記號）</span>
+    </div>
+    <div class="row">
+      <span class="label">標註</span>
+      <div class="seg" id="seg-kind">
+        <button type="button" id="k-jp" data-v="jianpu" aria-pressed="true">簡譜 1 2 3</button>
+        <button type="button" id="k-so" data-v="solfege" aria-pressed="false">唱名 Do Re</button>
+        <button type="button" id="k-nm" data-v="name" aria-pressed="false">音名 C D</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="label">調性</span>
+      <div class="seg" id="seg-mode">
+        <button type="button" id="m-mov" data-v="movable" aria-pressed="true">首調（1＝主音）</button>
+        <button type="button" id="m-fix" data-v="fixed" aria-pressed="false">原調（1＝C，加升降）</button>
+      </div>
+      <span class="keybadge" id="keybadge">1=G</span>
+    </div>
+    <div class="row">
+      <span class="label">小調</span>
+      <div class="seg" id="seg-minor">
+        <button type="button" id="n-la" data-v="la" aria-pressed="true">6 為主音</button>
+        <button type="button" id="n-do" data-v="do" aria-pressed="false">1 為主音</button>
+      </div>
+      <label class="meta"><input type="checkbox" id="lyrics" checked> 顯示原歌詞</label>
+    </div>
+    <div class="row">
+      <span class="label">匯出</span>
+      <button type="button" id="dl-midi">下載 MIDI</button>
+      <button type="button" id="dl-xml">下載標註後 MusicXML</button>
+      <span class="note" id="dlnote">直接下載 .mid 或 .musicxml</span>
+    </div>
+  </section>
+
+  <div class="sheet" id="sheet">
+    <div id="osmd"></div>
+    <div class="empty" id="empty">樂譜載入中…</div>
+  </div>
+
+  <div class="legend">
+    <div><b>首調</b>：調的主音當 1，譜頭標「1=G」；臨時記號相對調號換算，例如 G 大調的 F♮ 標成 ♭7。</div>
+    <div><b>原調</b>：C 固定是 1，調號裡的升降直接標出，例如 F♯ 標成 ♯4。</div>
+    <div><b>八度</b>：數字上方加點是高八度，下方加點是低八度；「–」表示延音線延續。</div>
+    <div><b>支援格式</b>：MusicXML（.musicxml／.xml／.mxl）。MuseScore、Finale、Sibelius 可先匯出 MusicXML；圖檔辨識是下一階段。</div>
+  </div>
+</div>
+
+<div class="transport">
+  <div class="inner">
+    <button class="primary" type="button" id="play" disabled>▶ 播放</button>
+    <button type="button" id="stop" disabled>■ 停止</button>
+    <label class="speed" for="speed">速度 <input type="range" id="speed" min="50" max="150" step="5" value="100"> <span id="speedv">100%</span></label>
+    <span class="toast" id="toast" role="status"></span>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@2.1.3/build/opensheetmusicdisplay.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tone@15.1.22/build/Tone.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+"use strict";
+// ---------- music theory ----------
+const LETTERS = ["C","D","E","F","G","A","B"];
+const SEMI = [0,2,4,5,7,9,11];
+const SOLF = ["Do","Re","Mi","Fa","Sol","La","Si"];
+const mod = (a, n) => ((a % n) + n) % n;
+
+function keyAlters(fifths) {
+  const m = {C:0,D:0,E:0,F:0,G:0,A:0,B:0};
+  const sh = ["F","C","G","D","A","E","B"], fl = ["B","E","A","D","G","C","F"];
+  if (fifths > 0) for (let i = 0; i < Math.min(fifths, 7); i++) m[sh[i]] = 1;
+  if (fifths < 0) for (let i = 0; i < Math.min(-fifths, 7); i++) m[fl[i]] = -1;
+  return m;
+}
+function accSym(a) {
+  if (a === 0) return "";
+  if (a > 0) return "♯".repeat(a);
+  return "♭".repeat(-a);
+}
+// key context: {fifths, mode} -> reference tonic used for numbering
+function keyContext(fifths, mode, opts) {
+  const ka = keyAlters(fifths);
+  const majIdx = mod(fifths * 4, 7);
+  let refIdx = majIdx;
+  const isMinor = mode === "minor";
+  if (isMinor && opts.minor === "do") refIdx = mod(majIdx + 5, 7);
+  const refLetter = LETTERS[refIdx];
+  const majLetter = LETTERS[majIdx];
+  const tonicIdx = isMinor ? mod(majIdx + 5, 7) : majIdx;
+  const tonicName = LETTERS[tonicIdx] + accSym(ka[LETTERS[tonicIdx]]);
+  return {
+    fifths, isMinor, ka, refIdx,
+    oneEquals: refLetter + accSym(ka[refLetter]),
+    keyName: tonicName + (isMinor ? " 小調" : " 大調"),
+    majName: majLetter + accSym(ka[majLetter]),
+  };
+}
+// returns label string for one pitch
+function pitchLabel(step, alter, octave, kc, opts) {
+  if (opts.kind === "name") return step + accSym(alter) + octave;
+  const li = LETTERS.indexOf(step);
+  const fixed = opts.mode === "fixed";
+  const refIdx = fixed ? 0 : kc.refIdx;
+  const d = (octave * 7 + li) - (4 * 7 + refIdx);
+  const deg = mod(d, 7);
+  const dots = Math.floor(d / 7);
+  const acc = alter - (fixed ? 0 : kc.ka[step]);
+  if (opts.kind === "solfege") return accSym(acc) + SOLF[deg];
+  let s = accSym(acc) + String(deg + 1);
+  if (dots > 0) s += "̇".repeat(dots);
+  if (dots < 0) s += "̣".repeat(-dots);
+  return s;
+}
+
+// ---------- MusicXML helpers ----------
+const kids = (el, name) => Array.from(el.children).filter(c => c.localName === name);
+const kid = (el, name) => Array.from(el.children).find(c => c.localName === name) || null;
+const txt = (el, name, d) => { const k = el && kid(el, name); return k ? k.textContent.trim() : d; };
+
+async function readScoreFile(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".mxl")) {
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    let path = null;
+    const cont = zip.file("META-INF/container.xml");
+    if (cont) {
+      const c = new DOMParser().parseFromString(await cont.async("string"), "application/xml");
+      const rf = c.getElementsByTagName("rootfile")[0];
+      if (rf) path = rf.getAttribute("full-path");
+    }
+    if (!path) path = Object.keys(zip.files).find(p => !p.startsWith("META-INF") && /\.(xml|musicxml)$/i.test(p));
+    if (!path || !zip.file(path)) throw new Error("這個 .mxl 裡找不到樂譜檔。");
+    return await zip.file(path).async("string");
+  }
+  return await file.text();
+}
+function parseXML(str) {
+  const doc = new DOMParser().parseFromString(str, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length) throw new Error("檔案不是有效的 XML。");
+  const root = doc.documentElement.localName;
+  if (root === "score-timewise") throw new Error("目前只支援 score-partwise 格式的 MusicXML（大部分打譜軟體預設都是這種）。");
+  if (root !== "score-partwise") throw new Error("這不是 MusicXML 樂譜檔。");
+  return doc;
+}
+
+// ---------- annotation ----------
+function annotate(srcDoc, opts) {
+  const doc = srcDoc.cloneNode(true);
+  if (!opts.lyrics) Array.from(doc.getElementsByTagName("lyric")).forEach(l => l.remove());
+  const parts = kids(doc.documentElement, "part");
+  let firstKC = null;
+  parts.forEach((part, pi) => {
+    let kc = keyContext(0, "major", opts);
+    let seenKey = false;
+    for (const measure of kids(part, "measure")) {
+      let chordHead = null, chordLabels = [];
+      const flush = () => {
+        if (chordHead && chordLabels.length) addLyric(doc, chordHead, chordLabels.slice().sort((a, b) => b.m - a.m).map(x => x.t).join("/"));
+        chordHead = null; chordLabels = [];
+      };
+      for (const el of Array.from(measure.children)) {
+        if (el.localName === "attributes") {
+          const key = kid(el, "key");
+          if (key && kid(key, "fifths")) {
+            kc = keyContext(parseInt(txt(key, "fifths", "0"), 10) || 0, txt(key, "mode", "major"), opts);
+            if (!firstKC) firstKC = kc;
+            if (pi === 0 && opts.kind !== "name") {
+              const label = opts.mode === "fixed" ? (seenKey ? null : "1=C") : "1=" + kc.oneEquals;
+              if (label) insertWords(doc, el, label);
+            }
+            seenKey = true;
+          }
+          continue;
+        }
+        if (el.localName !== "note") continue;
+        const isChord = !!kid(el, "chord");
+        if (!isChord) flush();
+        const pitch = kid(el, "pitch");
+        if (!pitch || kid(el, "grace") || kid(el, "cue")) { if (!isChord) chordHead = null; continue; }
+        const step = txt(pitch, "step", "C"), alter = Math.round(parseFloat(txt(pitch, "alter", "0")) || 0), oct = parseInt(txt(pitch, "octave", "4"), 10);
+        const tieStop = kids(el, "tie").some(t => t.getAttribute("type") === "stop");
+        const label = tieStop ? "–" : pitchLabel(step, alter, oct, kc, opts);
+        const m = oct * 12 + SEMI[LETTERS.indexOf(step)] + alter;
+        if (!isChord) chordHead = el;
+        if (chordHead) chordLabels.push({ t: label, m });
+      }
+      flush();
+    }
+  });
+  return { doc, kc: firstKC || keyContext(0, "major", opts) };
+}
+function addLyric(doc, note, text) {
+  const ns = note.namespaceURI;
+  const ly = doc.createElementNS(ns, "lyric");
+  ly.setAttribute("number", "99");
+  ly.setAttribute("placement", "below");
+  const sy = doc.createElementNS(ns, "syllabic"); sy.textContent = "single";
+  const tx = doc.createElementNS(ns, "text"); tx.textContent = text;
+  ly.append(sy, tx);
+  const before = kid(note, "play") || kid(note, "listen");
+  if (before) note.insertBefore(ly, before); else note.appendChild(ly);
+}
+function insertWords(doc, afterEl, text) {
+  const ns = afterEl.namespaceURI;
+  const dir = doc.createElementNS(ns, "direction"); dir.setAttribute("placement", "above");
+  const dt = doc.createElementNS(ns, "direction-type");
+  const w = doc.createElementNS(ns, "words"); w.setAttribute("font-weight", "bold"); w.textContent = text;
+  dt.appendChild(w); dir.appendChild(dt);
+  afterEl.parentNode.insertBefore(dir, afterEl.nextSibling);
+}
+
+// ---------- event extraction (playback + MIDI) ----------
+function extractEvents(doc) {
+  const root = doc.documentElement;
+  const programs = {}, names = {};
+  for (const sp of root.getElementsByTagName("score-part")) {
+    const id = sp.getAttribute("id");
+    names[id] = txt(sp, "part-name", id);
+    const mi = sp.getElementsByTagName("midi-program")[0];
+    programs[id] = mi ? Math.max(0, parseInt(mi.textContent, 10) - 1) : 0;
+  }
+  const tempos = [];
+  const tracks = [];
+  kids(root, "part").forEach(part => {
+    const id = part.getAttribute("id");
+    const notes = [];
+    const open = {};
+    let divisions = 1, mStart = 0;
+    for (const measure of kids(part, "measure")) {
+      let t = mStart, maxT = mStart, lastStart = mStart;
+      for (const el of Array.from(measure.children)) {
+        const ln = el.localName;
+        if (ln === "attributes") { const d = txt(el, "divisions", null); if (d) divisions = parseFloat(d) || 1; }
+        else if (ln === "backup") { t -= parseFloat(txt(el, "duration", "0")) / divisions; }
+        else if (ln === "forward") { t += parseFloat(txt(el, "duration", "0")) / divisions; maxT = Math.max(maxT, t); }
+        else if (ln === "sound" || ln === "direction") {
+          const s = ln === "sound" ? el : kid(el, "sound");
+          if (s && s.getAttribute("tempo")) tempos.push({ q: t, bpm: parseFloat(s.getAttribute("tempo")) });
+          else if (ln === "direction") {
+            const mt = el.getElementsByTagName("metronome")[0];
+            if (mt && txt(mt, "beat-unit", "") === "quarter" && txt(mt, "per-minute", null)) tempos.push({ q: t, bpm: parseFloat(txt(mt, "per-minute")) });
+          }
+        } else if (ln === "note") {
+          if (kid(el, "grace") || kid(el, "cue")) continue;
+          const dur = parseFloat(txt(el, "duration", "0")) / divisions;
+          const isChord = !!kid(el, "chord");
+          const start = isChord ? lastStart : t;
+          if (!isChord) { lastStart = t; t += dur; }
+          maxT = Math.max(maxT, t, start + dur);
+          const pitch = kid(el, "pitch");
+          if (!pitch) continue;
+          const step = txt(pitch, "step", "C");
+          const midi = (parseInt(txt(pitch, "octave", "4"), 10) + 1) * 12 + SEMI[LETTERS.indexOf(step)] + Math.round(parseFloat(txt(pitch, "alter", "0")) || 0);
+          const ties = kids(el, "tie").map(x => x.getAttribute("type"));
+          if (ties.includes("stop") && open[midi]) {
+            open[midi].end = start + dur;
+            if (!ties.includes("start")) delete open[midi];
+          } else {
+            const ev = { midi, start, end: start + dur };
+            notes.push(ev);
+            if (ties.includes("start")) open[midi] = ev;
+          }
+        }
+      }
+      mStart = maxT;
+    }
+    tracks.push({ name: names[id] || id, program: programs[id] || 0, notes });
+  });
+  tempos.sort((a, b) => a.q - b.q);
+  const tmap = [];
+  for (const tp of tempos) {
+    if (!(tp.bpm > 0)) continue;
+    if (tmap.length && Math.abs(tmap[tmap.length - 1].q - tp.q) < 1e-6) tmap[tmap.length - 1].bpm = tp.bpm;
+    else tmap.push(tp);
+  }
+  if (!tmap.length || tmap[0].q > 0) tmap.unshift({ q: 0, bpm: tmap.length ? tmap[0].bpm : 100 });
+  let acc = 0;
+  for (let i = 0; i < tmap.length; i++) {
+    tmap[i].sec = acc;
+    if (i + 1 < tmap.length) acc += (tmap[i + 1].q - tmap[i].q) * 60 / tmap[i].bpm;
+  }
+  return { tracks, tmap };
+}
+function secAt(tmap, q) {
+  let i = tmap.length - 1;
+  while (i > 0 && tmap[i].q > q) i--;
+  return tmap[i].sec + (q - tmap[i].q) * 60 / tmap[i].bpm;
+}
+
+// ---------- MIDI writer ----------
+function buildMidi(ev) {
+  const PPQ = 480;
+  const vlq = n => { const b = [n & 0x7f]; while ((n >>= 7)) b.unshift((n & 0x7f) | 0x80); return b; };
+  const u32 = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const chunk = (type, data) => [...type.split("").map(c => c.charCodeAt(0)), ...u32(data.length), ...data];
+  const textBytes = s => Array.from(new TextEncoder().encode(s));
+  const trackFrom = (events) => {
+    events.sort((a, b) => a.tick - b.tick || a.order - b.order);
+    const out = []; let last = 0;
+    for (const e of events) { out.push(...vlq(Math.max(0, e.tick - last)), ...e.bytes); last = e.tick; }
+    out.push(0, 0xff, 0x2f, 0);
+    return chunk("MTrk", out);
+  };
+  const tempoEvs = ev.tmap.map(t => { const us = Math.round(60000000 / t.bpm); return { tick: Math.round(t.q * PPQ), order: 0, bytes: [0xff, 0x51, 3, (us >> 16) & 255, (us >> 8) & 255, us & 255] }; });
+  const chunks = [trackFrom(tempoEvs)];
+  ev.tracks.forEach((tr, i) => {
+    let ch = i % 15; if (ch >= 9) ch++;
+    const nm = textBytes(tr.name).slice(0, 120);
+    const evs = [{ tick: 0, order: 0, bytes: [0xff, 0x03, ...vlq(nm.length), ...nm] }, { tick: 0, order: 1, bytes: [0xc0 | ch, tr.program & 127] }];
+    for (const n of tr.notes) {
+      if (n.midi < 0 || n.midi > 127) continue;
+      evs.push({ tick: Math.round(n.start * PPQ), order: 3, bytes: [0x90 | ch, n.midi, 84] });
+      evs.push({ tick: Math.max(Math.round(n.start * PPQ) + 1, Math.round(n.end * PPQ)), order: 2, bytes: [0x80 | ch, n.midi, 0] });
+    }
+    chunks.push(trackFrom(evs));
+  });
+  const header = chunk("MThd", [0, 1, ...[(chunks.length >> 8) & 255, chunks.length & 255], (PPQ >> 8) & 255, PPQ & 255]);
+  return new Uint8Array([...header, ...chunks.flat()]);
+}
+
+// ---------- sample score ----------
+function sampleXML() {
+  // [step, alter, octave, duration(divisions=2), type, accidental]
+  const M = [
+    [["G",0,4,2,"quarter"],["G",0,4,2,"quarter"],["D",0,5,2,"quarter"],["D",0,5,2,"quarter"]],
+    [["E",0,5,2,"quarter"],["E",0,5,2,"quarter"],["D",0,5,4,"half"]],
+    [["C",0,5,2,"quarter"],["C",0,5,2,"quarter"],["B",0,4,2,"quarter"],["B",0,4,2,"quarter"]],
+    [["A",0,4,2,"quarter"],["A",0,4,2,"quarter"],["G",0,4,4,"half"]],
+    [["D",0,5,2,"quarter"],["D",0,5,2,"quarter"],["C",0,5,2,"quarter"],["C",0,5,2,"quarter"]],
+    [["B",0,4,2,"quarter"],["B",0,4,2,"quarter"],["A",0,4,4,"half"]],
+    [["G",0,4,1,"eighth"],["A",0,4,1,"eighth"],["B",0,4,1,"eighth"],["C",1,5,1,"eighth","sharp"],["D",0,5,2,"quarter"],["F",0,5,2,"quarter","natural"]],
+    [["E",0,5,2,"quarter"],["F",1,4,2,"quarter"],["G",0,4,4,"half"]],
+  ];
+  let body = "";
+  M.forEach((notes, i) => {
+    body += `<measure number="${i + 1}">`;
+    if (i === 0) body += `<attributes><divisions>2</divisions><key><fifths>1</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>96</per-minute></metronome></direction-type><sound tempo="96"/></direction>`;
+    for (const [s, a, o, d, ty, acc] of notes) {
+      body += `<note><pitch><step>${s}</step>${a ? `<alter>${a}</alter>` : ""}<octave>${o}</octave></pitch><duration>${d}</duration><voice>1</voice><type>${ty}</type>${acc ? `<accidental>${acc}</accidental>` : ""}</note>`;
+    }
+    if (i === M.length - 1) body += `<barline location="right"><bar-style>light-heavy</bar-style></barline>`;
+    body += `</measure>`;
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><work><work-title>小星星（G 大調示範）</work-title></work><part-list><score-part id="P1"><part-name>旋律</part-name><score-instrument id="P1-I1"><instrument-name>Piano</instrument-name></score-instrument><midi-instrument id="P1-I1"><midi-program>1</midi-program></midi-instrument></score-part></part-list><part id="P1">${body}</part></score-partwise>`;
+}
+
+// ---------- app state ----------
+const $ = id => document.getElementById(id);
+const state = { srcDoc: null, title: "score", opts: { kind: "jianpu", mode: "movable", minor: "la", lyrics: true }, ev: null, cursorQ: [], annotated: null };
+let osmd = null, synth = null, playing = false, renderSeq = 0;
+
+function toast(msg) { $("toast").textContent = msg; }
+
+function initOSMD() {
+  osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay("osmd", {
+    autoResize: true, backend: "svg", drawTitle: true, drawComposer: true, autoBeam: true,
+    followCursor: false, drawPartNames: true,
+  });
+  osmd.EngravingRules.DefaultColorLyrics = "#c0392b";
+  osmd.EngravingRules.LyricsHeight = 2.2;
+  osmd.EngravingRules.DefaultFontFamily = "Noto Sans TC, PingFang TC, Microsoft JhengHei, sans-serif";
+}
+
+async function render() {
+  if (!state.srcDoc) return;
+  const seq = ++renderSeq;
+  stop();
+  const { doc, kc } = annotate(state.srcDoc, state.opts);
+  state.annotated = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(doc).replace(/^<\?xml[^>]*\?>\s*/, "");
+  const badge = $("keybadge");
+  if (state.opts.kind === "name") badge.textContent = kc.keyName;
+  else if (state.opts.mode === "fixed") badge.textContent = "1=C · " + kc.keyName;
+  else badge.textContent = "1=" + kc.oneEquals + " · " + kc.keyName;
+  $("seg-mode").classList.toggle("off", state.opts.kind === "name");
+  try {
+    await osmd.load(state.annotated);
+    if (seq !== renderSeq) return;
+    osmd.Zoom = document.getElementById("sheet").clientWidth < 640 ? 0.72 : 1;
+    osmd.render();
+    $("empty").hidden = true;
+    collectCursor();
+    $("play").disabled = false;
+  } catch (e) {
+    console.error(e);
+    $("empty").hidden = false;
+    $("empty").textContent = "樂譜無法顯示：" + (e.message || e);
+    $("play").disabled = true;
+  }
+}
+
+function collectCursor() {
+  state.cursorQ = [];
+  try {
+    (osmd.enableOrDisableCursors || osmd.enableOrDisableCursor).call(osmd, true);
+    const c = osmd.cursor;
+    c.reset();
+    let last = -1, guard = 0;
+    while (!c.iterator.EndReached && guard++ < 20000) {
+      const q = c.iterator.currentTimeStamp.RealValue * 4;
+      if (q < last - 1e-6) break;
+      state.cursorQ.push(q); last = q;
+      c.next();
+    }
+    c.reset(); c.hide();
+  } catch (e) { console.warn("cursor", e); }
+}
+
+async function loadDoc(xmlStr, label) {
+  const doc = parseXML(xmlStr);
+  state.srcDoc = doc;
+  state.ev = extractEvents(doc);
+  const title = (doc.getElementsByTagName("work-title")[0] || doc.getElementsByTagName("movement-title")[0] || {}).textContent;
+  state.title = (title || label || "score").trim().replace(/[\\/:*?"<>|]+/g, "_").slice(0, 60) || "score";
+  const nNotes = state.ev.tracks.reduce((s, t) => s + t.notes.length, 0);
+  $("fileinfo").textContent = `${label} · ${state.ev.tracks.length} 個聲部 · ${nNotes} 個音`;
+  await render();
+}
+
+// ---------- playback ----------
+function ensureSynth() {
+  if (synth) return synth;
+  synth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle8" },
+    envelope: { attack: 0.004, decay: 0.35, sustain: 0.25, release: 0.9 },
+  }).toDestination();
+  synth.maxPolyphony = 48;
+  synth.volume.value = -10;
+  return synth;
+}
+async function play() {
+  if (!state.ev) return;
+  await Tone.start();
+  stop();
+  const s = ensureSynth();
+  const rate = parseInt($("speed").value, 10) / 100;
+  const T = Tone.getTransport ? Tone.getTransport() : Tone.Transport;
+  const D = Tone.getDraw ? Tone.getDraw() : Tone.Draw;
+  const tm = state.ev.tmap;
+  let endSec = 0;
+  for (const tr of state.ev.tracks) {
+    for (const n of tr.notes) {
+      const a = secAt(tm, n.start) / rate, b = secAt(tm, n.end) / rate;
+      endSec = Math.max(endSec, b);
+      const f = Tone.Frequency(n.midi, "midi").toFrequency();
+      T.schedule(time => s.triggerAttackRelease(f, Math.max(0.05, b - a - 0.01), time, 0.75), a);
+    }
+  }
+  const c = osmd.cursor;
+  if (c && state.cursorQ.length) {
+    c.reset(); c.show(); scrollCursor();
+    state.cursorQ.forEach((q, i) => {
+      if (i === 0) return;
+      T.schedule(time => D.schedule(() => { if (playing) { c.next(); scrollCursor(); } }, time), secAt(tm, q) / rate);
+    });
+  }
+  T.schedule(time => D.schedule(() => stop(), time), endSec + 0.3);
+  playing = true;
+  $("play").disabled = true; $("stop").disabled = false;
+  toast("播放中");
+  T.start("+0.1");
+}
+function stop() {
+  const T = window.Tone ? (Tone.getTransport ? Tone.getTransport() : Tone.Transport) : null;
+  if (T) { T.stop(); T.cancel(0); T.position = 0; }
+  if (synth) synth.releaseAll();
+  if (playing) toast("");
+  playing = false;
+  try { if (osmd && osmd.cursor) osmd.cursor.hide(); } catch (e) {}
+  $("play").disabled = !state.srcDoc; $("stop").disabled = true;
+}
+function scrollCursor() {
+  const el = osmd.cursor && osmd.cursor.cursorElement;
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  if (r.top < 60 || r.bottom > window.innerHeight - 90) el.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
+
+// ---------- downloads ----------
+function saveFile(filename, data, mime) {
+  const blob = new Blob([data], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast("已下載 " + filename);
+}
+
+// ---------- wiring ----------
+function bindSeg(segId, key) {
+  const seg = $(segId);
+  seg.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    for (const x of seg.querySelectorAll("button")) x.setAttribute("aria-pressed", String(x === b));
+    state.opts[key] = b.dataset.v;
+    render();
+  });
+}
+bindSeg("seg-kind", "kind"); bindSeg("seg-mode", "mode"); bindSeg("seg-minor", "minor");
+$("lyrics").addEventListener("change", e => { state.opts.lyrics = e.target.checked; render(); });
+$("speed").addEventListener("input", e => { $("speedv").textContent = e.target.value + "%"; });
+$("play").addEventListener("click", play);
+$("stop").addEventListener("click", stop);
+$("sample").addEventListener("click", () => loadDoc(sampleXML(), "範例：小星星（G 大調，含臨時記號）").catch(err => toast(err.message)));
+$("file").addEventListener("change", async e => {
+  const f = e.target.files[0]; if (!f) return;
+  if (/\.(png|jpe?g|pdf|gif|webp)$/i.test(f.name)) { toast("圖檔辨識還沒開放，請先轉成 MusicXML。"); return; }
+  try { $("empty").hidden = false; $("empty").textContent = "樂譜載入中…"; await loadDoc(await readScoreFile(f), f.name); toast(""); }
+  catch (err) { toast(err.message || String(err)); $("empty").textContent = err.message || String(err); }
+  e.target.value = "";
+});
+const sheet = $("sheet");
+sheet.addEventListener("dragover", e => e.preventDefault());
+sheet.addEventListener("drop", async e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0]; if (!f) return;
+  try { await loadDoc(await readScoreFile(f), f.name); } catch (err) { toast(err.message || String(err)); }
+});
+$("dl-midi").addEventListener("click", () => { if (state.ev) saveFile(state.title + ".mid", buildMidi(state.ev), "audio/midi"); });
+$("dl-xml").addEventListener("click", () => {
+  if (!state.annotated) return;
+  const tag = state.opts.kind === "name" ? "音名" : (state.opts.kind === "solfege" ? "唱名" : "簡譜") + (state.opts.kind === "name" ? "" : state.opts.mode === "fixed" ? "-原調" : "-首調");
+  saveFile(`${state.title}-${tag}.musicxml`, state.annotated, "application/vnd.recordare.musicxml+xml");
+});
+
+(async function boot() {
+  $("dl-midi").disabled = $("dl-xml").disabled = true;
+  $("dlnote").textContent = "下載功能準備中…";
+  if (!window.opensheetmusicdisplay || !window.Tone || !window.JSZip) {
+    $("empty").textContent = "樂譜元件載入失敗，請重新整理頁面。";
+    return;
+  }
+  initOSMD();
+  try { await loadDoc(sampleXML(), "範例：小星星（G 大調，含臨時記號）"); } catch (e) { console.error(e); }
+  $("dl-midi").disabled = $("dl-xml").disabled = false;
+  $("dlnote").textContent = "直接下載 .mid 或 .musicxml";
+})();
+</script>
+</body>
+</html>
