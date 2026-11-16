@@ -1,0 +1,33 @@
+# 遠端部署（VPS）：Caddy 自動申請 HTTPS 憑證 + 辨識服務（需 API 金鑰）
+# 用法：cp .env.example .env，改好 DOMAIN／API_KEY／ORIGINS，然後
+#   docker compose -f docker-compose.remote.yml up -d --build
+services:
+  omr:
+    build: .
+    image: jianpu-annotator-omr
+    restart: unless-stopped
+    environment:
+      JIANPU_OMR_API_KEY: ${API_KEY:?請在 .env 設定 API_KEY}
+      JIANPU_OMR_ORIGINS: ${ORIGINS:?請在 .env 設定 ORIGINS}
+      JIANPU_OMR_CONCURRENCY: ${CONCURRENCY:-1}
+    expose:
+      - "8765"
+    mem_limit: ${MEM_LIMIT:-3g}
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [omr]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?請在 .env 設定 DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -6,10 +6,10 @@
 
 啟動：  python server.py        （預設 http://127.0.0.1:8765）
 """
-import os, shutil, subprocess, sys, tempfile
+import asyncio, hmac, os, shutil, subprocess, sys, tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
@@ -17,9 +17,15 @@ HOST = os.environ.get("JIANPU_OMR_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JIANPU_OMR_PORT", "8765"))
 TIMEOUT = int(os.environ.get("JIANPU_OMR_TIMEOUT", "900"))
 MAX_BYTES = 40 * 1024 * 1024
+API_KEY = os.environ.get("JIANPU_OMR_API_KEY", "").strip()          # 遠端部署時務必設定
+ORIGINS = [o.strip() for o in os.environ.get("JIANPU_OMR_ORIGINS", "*").split(",") if o.strip()]
+CONCURRENCY = max(1, int(os.environ.get("JIANPU_OMR_CONCURRENCY", "1")))  # 同時辨識幾張（吃 CPU／記憶體）
+MAX_WAITING = int(os.environ.get("JIANPU_OMR_MAX_WAITING", "4"))          # 排隊上限，超過回 429
+_sem = asyncio.Semaphore(CONCURRENCY)
+_waiting = 0
 
 app = FastAPI(title="jianpu-annotator OMR")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 
 @app.middleware("http")
@@ -55,10 +61,20 @@ def prepare_image(src: Path, dst: Path, page: int):
     img.save(dst, "PNG")
 
 
+def require_key(x_api_key: str = Header(default="")):
+    if API_KEY and not hmac.compare_digest(x_api_key.encode(), API_KEY.encode()):
+        raise HTTPException(401, "需要正確的 API 金鑰")
+
+
 @app.get("/health")
 def health():
     ok = bool(shutil.which("homr")) or _can_import("homr")
-    return {"ok": True, "homr": ok}
+    return {"ok": True, "homr": ok, "auth": bool(API_KEY)}
+
+
+@app.get("/check", dependencies=[Depends(require_key)])
+def check():
+    return {"ok": True}
 
 
 def _can_import(name):
@@ -67,7 +83,10 @@ def _can_import(name):
 
 
 @app.post("/recognize")
-async def recognize(file: UploadFile = File(...), page: int = Form(1)):
+async def recognize(file: UploadFile = File(...), page: int = Form(1), _auth=Depends(require_key)):
+    global _waiting
+    if _waiting >= MAX_WAITING:
+        raise HTTPException(429, "目前辨識的人太多，請稍後再試")
     data = await file.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "檔案太大（上限 40 MB）")
@@ -79,18 +98,24 @@ async def recognize(file: UploadFile = File(...), page: int = Form(1)):
         src = td / f"input{suffix}"
         src.write_bytes(data)
         png = td / "score.png"
+        _waiting += 1
         try:
-            prepare_image(src, png, page)
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(400, f"無法讀取圖檔：{e}")
-        try:
-            proc = subprocess.run(homr_cmd(png), cwd=td, capture_output=True, text=True, timeout=TIMEOUT)
-        except subprocess.TimeoutExpired:
-            raise HTTPException(504, f"辨識超過 {TIMEOUT} 秒，已中止")
-        except FileNotFoundError:
-            raise HTTPException(500, "找不到 homr，請先執行 pip install -r requirements.txt")
+            async with _sem:
+                try:
+                    await asyncio.to_thread(prepare_image, src, png, page)
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    raise HTTPException(400, f"無法讀取圖檔：{e}")
+                try:
+                    proc = await asyncio.to_thread(
+                        subprocess.run, homr_cmd(png), cwd=td, capture_output=True, text=True, timeout=TIMEOUT)
+                except subprocess.TimeoutExpired:
+                    raise HTTPException(504, f"辨識超過 {TIMEOUT} 秒，已中止")
+                except FileNotFoundError:
+                    raise HTTPException(500, "找不到 homr，請先執行 pip install -r requirements.txt")
+        finally:
+            _waiting -= 1
         out = td / "score.musicxml"
         if proc.returncode != 0 or not out.exists():
             tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-6:]
@@ -101,5 +126,7 @@ async def recognize(file: UploadFile = File(...), page: int = Form(1)):
 
 if __name__ == "__main__":
     import uvicorn
+    if HOST not in ("127.0.0.1", "localhost") and not API_KEY:
+        print("警告：服務對外開放但沒有設定 JIANPU_OMR_API_KEY，任何人都能使用！", flush=True)
     print(f"圖檔辨識服務啟動：http://127.0.0.1:{PORT}（第一次辨識會下載模型，需要連網）", flush=True)
     uvicorn.run(app, host=HOST, port=PORT, log_level="info")

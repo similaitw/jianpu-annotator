@@ -1,0 +1,11 @@
+{$DOMAIN} {
+	request_body {
+		max_size 45MB
+	}
+	reverse_proxy omr:8765 {
+		# 整頁樂譜辨識可能要好幾分鐘
+		transport http {
+			response_header_timeout 15m
+		}
+	}
+}

@@ -752,19 +752,28 @@
 
   // ---------- 圖檔辨識（連到本機後端 backend/server.py） ----------
   const omrBase = () => ($("omrUrl").value.trim() || "http://127.0.0.1:8765").replace(/\/+$/, "");
+  const omrHeaders = () => { const k = $("omrKey").value.trim(); return k ? { "X-API-Key": k } : {}; };
+  const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
   async function omrPing() {
     const st = $("omrStatus");
     try {
       const ctl = new AbortController();
-      const to = setTimeout(() => ctl.abort(), 2500);
+      const to = setTimeout(() => ctl.abort(), 4000);
       const r = await fetch(omrBase() + "/health", { signal: ctl.signal });
-      clearTimeout(to);
       const j = await r.json();
-      st.textContent = j.homr ? "辨識服務：已連線 ✓" : "辨識服務已連線，但找不到 homr";
-      st.style.color = j.homr ? "#157347" : "#b42318";
-      return !!j.homr;
+      let keyOk = true;
+      if (j.auth) {
+        const c = await fetch(omrBase() + "/check", { headers: omrHeaders(), signal: ctl.signal });
+        keyOk = c.ok;
+      }
+      clearTimeout(to);
+      if (!j.homr) { st.textContent = "辨識服務已連線，但找不到 homr"; st.style.color = "#b42318"; return false; }
+      if (!keyOk) { st.textContent = $("omrKey").value.trim() ? "辨識服務已連線，但 API 金鑰不正確" : "辨識服務已連線，需要填 API 金鑰"; st.style.color = "#b42318"; return false; }
+      st.textContent = "辨識服務：已連線 ✓";
+      st.style.color = "#157347";
+      return true;
     } catch (e) {
-      st.textContent = "辨識服務：未連線（先執行 backend/start.bat）";
+      st.textContent = "辨識服務：未連線（本機請先啟動 backend；遠端請檢查網址）";
       st.style.color = "#b42318";
       return false;
     }
@@ -772,7 +781,7 @@
   async function recognizeImage(file) {
     const st = $("omrStatus");
     $("err").textContent = "";
-    if (!(await omrPing())) { $("err").textContent = "連不上本機辨識服務。請先在電腦上執行 backend/start.bat（Mac／Linux 用 start.sh），看到「圖檔辨識服務啟動」後再試一次。"; return; }
+    if (!(await omrPing())) { $("err").textContent = "連不上辨識服務。本機版請先啟動 backend（docker-start 或 start.bat）；遠端版請到「圖檔辨識設定」確認網址與 API 金鑰。"; return; }
     st.textContent = "辨識中…（小圖約數秒，整頁樂譜可能要 1–3 分鐘，第一次還要下載模型）";
     st.style.color = "#555";
     $("omrBtn").disabled = true;
@@ -780,7 +789,7 @@
     fd.append("file", file);
     fd.append("page", $("omrPage").value || "1");
     try {
-      const r = await fetch(omrBase() + "/recognize", { method: "POST", body: fd });
+      const r = await fetch(omrBase() + "/recognize", { method: "POST", body: fd, headers: omrHeaders() });
       const j = await r.json();
       if (!r.ok) throw new Error(j.detail || r.statusText);
       showOriginal(file);
@@ -807,7 +816,10 @@
     }
   }
   $("omrFile").addEventListener("change", (ev) => { const f = ev.target.files[0]; if (f) recognizeImage(f); ev.target.value = ""; });
-  $("omrUrl").addEventListener("change", omrPing);
+  $("omrUrl").value = store.get("omrUrl") || $("omrUrl").value;
+  $("omrKey").value = store.get("omrKey");
+  $("omrUrl").addEventListener("change", () => { store.set("omrUrl", $("omrUrl").value.trim()); omrPing(); });
+  $("omrKey").addEventListener("change", () => { store.set("omrKey", $("omrKey").value.trim()); omrPing(); });
   omrPing();
 
   // drag & drop

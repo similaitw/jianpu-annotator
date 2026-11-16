@@ -59,9 +59,10 @@ input[type=file]{display:none}
 <details class="lyr"><summary>圖檔辨識設定</summary>
 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:6px 0">
 <label>本機服務位址<input id="omrUrl" type="text" value="http://127.0.0.1:8765" style="width:220px"></label>
+<label>API 金鑰（遠端服務才需要）<input id="omrKey" type="password" autocomplete="off" style="width:200px"></label>
 <label>PDF 頁碼<input id="omrPage" type="number" min="1" value="1"></label>
 <span id="omrStatus" style="font-size:13px"></span></div>
-<div class="hint" style="margin:0">圖檔只會送到你自己電腦上的辨識服務（backend/），不會上傳到網路。辨識用 homr；第一次執行會下載模型。</div>
+<div class="hint" style="margin:0">服務位址預設是你自己電腦（127.0.0.1），圖檔不會離開電腦。若填的是遠端網址，圖檔會送到那台主機；網址與金鑰只存在這個瀏覽器。辨識用 homr。</div>
 </details>
 <details class="lyr"><summary>貼上歌詞（會取代檔案裡的歌詞；一行一段）</summary>
 <textarea id="lyricText" rows="4" placeholder="中文每個字對應一個音；英文用空格或 - 分音節；用 _ 表示這個音沒有字"></textarea>

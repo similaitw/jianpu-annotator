@@ -38,6 +38,20 @@
 
 說明：服務只開放給本機（Docker 版只對 127.0.0.1 開埠）；圖太小會先放大 3 倍；PDF 可指定頁碼；整頁樂譜約 1–3 分鐘。在 Vercel 上的網頁一樣可以連本機服務（Chrome／Edge 允許 https 頁面呼叫 localhost）。
 
+## 遠端使用（把辨識服務放到網路上）
+Vercel 只能放靜態網頁，跑不了 homr，所以要另外一台會跑 Docker 的主機（VPS，建議 4 GB 以上記憶體）。
+1. 準備一個網域，A 記錄指到主機 IP；主機裝好 Docker，開放 80、443 埠
+2. 把 `backend/` 放到主機，`cp .env.example .env`，填 `DOMAIN`、`API_KEY`（自訂長密碼，可用 `openssl rand -hex 24`）、`ORIGINS`（你的網站網址）
+3. `docker compose -f docker-compose.remote.yml up -d --build`（Caddy 會自動申請 HTTPS 憑證）
+4. 在網頁「圖檔辨識設定」填服務位址 `https://你的網域` 和 API 金鑰，狀態顯示「已連線 ✓」就能用
+
+安全與隱私：
+- 一定要設 `API_KEY`；沒設卻對外開放時，服務啟動會印警告。金鑰錯誤回 401，`ORIGINS` 限制只有你的網站能跨網域呼叫
+- 同時辨識數量預設 1，其他人排隊，排隊超過 4 人回「人太多」
+- 遠端模式下圖檔會送到那台主機，辨識完即刪除，不留存
+- 網址與金鑰只存在使用者自己的瀏覽器（localStorage）
+- 替代方案：Cloud Run、Fly.io、Railway 等能跑 Docker 的平台，同一個映像檔可直接用，環境變數一樣是 `JIANPU_OMR_API_KEY`、`JIANPU_OMR_ORIGINS`
+
 ## 開發
 ```
 python3 build.py     # src/ + vendor/ → index.html
