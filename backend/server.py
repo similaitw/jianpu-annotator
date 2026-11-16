@@ -13,6 +13,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
+HOST = os.environ.get("JIANPU_OMR_HOST", "127.0.0.1")
 PORT = int(os.environ.get("JIANPU_OMR_PORT", "8765"))
 TIMEOUT = int(os.environ.get("JIANPU_OMR_TIMEOUT", "900"))
 MAX_BYTES = 40 * 1024 * 1024
@@ -100,5 +101,5 @@ async def recognize(file: UploadFile = File(...), page: int = Form(1)):
 
 if __name__ == "__main__":
     import uvicorn
-    print(f"圖檔辨識服務啟動：http://127.0.0.1:{PORT}（第一次辨識會下載模型，需要連網）")
-    uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="info")
+    print(f"圖檔辨識服務啟動：http://127.0.0.1:{PORT}（第一次辨識會下載模型，需要連網）", flush=True)
+    uvicorn.run(app, host=HOST, port=PORT, log_level="info")

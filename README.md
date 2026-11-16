@@ -20,13 +20,23 @@
 ## 圖檔辨識（本機後端）
 網頁本身不上傳任何東西；要辨識圖檔時，網頁把圖傳到**你自己電腦上**的小服務，由它用 [homr](https://github.com/liebharc/homr)（開源 OMR）辨識成 MusicXML。
 
+**方法 A：Docker（建議，不用裝 Python）**
+1. 安裝 Docker Desktop 並啟動
+2. Windows：連按兩下 `backend/docker-start.bat`；Mac／Linux：`./backend/docker-start.sh`
+   （或在 `backend/` 資料夾執行 `docker compose up -d --build`）
+   第一次建置約幾分鐘，辨識模型在建置時就下載好，之後離線也能用；服務會在背景常駐，電腦重開後 Docker 啟動時自動跟著起來
+3. 停止：`docker compose down`
+
+**方法 B：直接用 Python**
 1. 安裝 Python 3.10 以上
 2. Windows：連按兩下 `backend/start.bat`；Mac／Linux：`./backend/start.sh`
    第一次會建立虛擬環境、安裝套件，第一次辨識時再下載模型（需要連網）
+
+**啟動後**
 3. 看到「圖檔辨識服務啟動：http://127.0.0.1:8765」後，回網頁按「從圖檔辨識」，或直接把圖檔拖進視窗
 4. 結果左上會顯示原圖方便對照。辨識**可能有誤**（音高、節奏、升降記號），請核對後再用
 
-說明：服務只綁定 127.0.0.1；圖太小會先放大 3 倍；PDF 可指定頁碼；整頁樂譜約 1–3 分鐘。在 Vercel 上的網頁一樣可以連本機服務（Chrome／Edge 允許 https 頁面呼叫 localhost）。
+說明：服務只開放給本機（Docker 版只對 127.0.0.1 開埠）；圖太小會先放大 3 倍；PDF 可指定頁碼；整頁樂譜約 1–3 分鐘。在 Vercel 上的網頁一樣可以連本機服務（Chrome／Edge 允許 https 頁面呼叫 localhost）。
 
 ## 開發
 ```

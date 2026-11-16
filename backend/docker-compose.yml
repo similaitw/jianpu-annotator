@@ -1,0 +1,9 @@
+services:
+  omr:
+    build: .
+    image: jianpu-annotator-omr
+    container_name: jianpu-omr
+    # 只開放給本機，區網其他電腦連不到
+    ports:
+      - "127.0.0.1:8765:8765"
+    restart: unless-stopped
