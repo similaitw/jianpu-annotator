@@ -52,6 +52,16 @@ Vercel 只能放靜態網頁，跑不了 homr，所以要另外一台會跑 Dock
 - 網址與金鑰只存在使用者自己的瀏覽器（localStorage）
 - 替代方案：Cloud Run、Fly.io、Railway 等能跑 Docker 的平台，同一個映像檔可直接用，環境變數一樣是 `JIANPU_OMR_API_KEY`、`JIANPU_OMR_ORIGINS`
 
+## 免費遠端：Google Cloud Run
+Cloud Run 有「永遠免費」額度，沒人用時縮到 0 台、不計費。整頁樂譜辨識一次約用 2 vCPU × 1 分鐘、4 GiB 記憶體，粗估每月免費額度夠辨識上千次。
+1. 建立 Google Cloud 專案、啟用帳單（**需要信用卡**；超過免費額度才會收費）
+2. **先設預算警示**：Billing → Budgets & alerts，例如 NT$30 就通知；部署腳本已限制最多 2 個實例，避免暴衝
+3. 裝 gcloud，`gcloud auth login`，`gcloud config set project 專案ID`
+4. 在 `backend/` 執行 `./deploy-cloudrun.sh https://你的網站網址`（Windows 用 WSL 或 Cloud Shell）
+5. 腳本最後印出服務位址與 API 金鑰，填到網頁「圖檔辨識設定」
+
+注意：第一次呼叫（冷啟動）要多等 10–30 秒；免費額度與計價以 [Cloud Run 官方頁面](https://cloud.google.com/run/pricing) 為準。
+
 ## 開發
 ```
 python3 build.py     # src/ + vendor/ → index.html

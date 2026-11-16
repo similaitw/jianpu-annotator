@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
 HOST = os.environ.get("JIANPU_OMR_HOST", "127.0.0.1")
-PORT = int(os.environ.get("JIANPU_OMR_PORT", "8765"))
+PORT = int(os.environ.get("PORT") or os.environ.get("JIANPU_OMR_PORT", "8765"))  # Cloud Run 會給 PORT
 TIMEOUT = int(os.environ.get("JIANPU_OMR_TIMEOUT", "900"))
 MAX_BYTES = 40 * 1024 * 1024
 API_KEY = os.environ.get("JIANPU_OMR_API_KEY", "").strip()          # 遠端部署時務必設定
