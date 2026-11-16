@@ -142,7 +142,11 @@
           if (text.trim() === "" && !ly.querySelector("extend")) return;
           fileLy[num - 1] = { text: text.trim(), hy: syl === "begin" || syl === "middle", ext: !!ly.querySelector("extend") };
         });
-        notes.push({ rest, pitch, dur, start, tieStop: !!tie, fileLy });
+        const tieStart = !!(el.querySelector('tie[type="start"]') || el.querySelector('notations tied[type="start"]'));
+        const tieStopB = !!(el.querySelector('tie[type="stop"]') || el.querySelector('notations tied[type="stop"]'));
+        const slurs = [];
+        el.querySelectorAll("notations slur").forEach((sl) => slurs.push({ type: sl.getAttribute("type"), num: sl.getAttribute("number") || "1" }));
+        notes.push({ rest, pitch, dur, start, tieStart, tieStop: tieStopB || !!tie, slurs, fileLy });
       }
       const keyEl = m.querySelector("attributes key fifths");
       measures.push({ notes, fifths: keyNow.fifths, hasAttr: !!at });
@@ -220,6 +224,33 @@
     }
   }
 
+  // ---------- 連結線（tie）與圓滑線（slur） ----------
+  function buildArcs(measures) {
+    const all = [];
+    measures.forEach((m) => m.notes.forEach((n) => { n.gi = all.length; all.push(n); }));
+    const arcs = [];
+    const open = {};
+    all.forEach((n) => {
+      (n.slurs || []).forEach((sl) => {
+        if (sl.type === "stop" && open[sl.num] != null) {
+          const a = all[open[sl.num]];
+          arcs.push({ kind: "slur", a, b: n, span: all.slice(a.gi, n.gi + 1).filter((x) => !x.rest) });
+          delete open[sl.num];
+        }
+      });
+      (n.slurs || []).forEach((sl) => { if (sl.type === "start") open[sl.num] = n.gi; });
+    });
+    all.forEach((n) => {
+      if (!n.tieStart || n.rest) return;
+      for (let j = n.gi + 1; j < all.length; j++) {
+        if (all[j].rest) break;
+        if (all[j].tieStop) { arcs.push({ kind: "tie", a: n, b: all[j], span: [n, all[j]] }); break; }
+        break;
+      }
+    });
+    return arcs;
+  }
+
   function toVfDur(d) {
     let best = DURS[0], bd = 1e9;
     for (const x of DURS) { const e = Math.abs(x[0] - d); if (e < bd) { bd = e; best = x; } }
@@ -251,6 +282,8 @@
     const showLyrics = $("showLyrics").checked;
     const LFS = Math.max(8, Math.min(30, parseFloat($("lyricSize").value) || 13));
     assignLyrics(measures);
+    const arcs = buildArcs(measures);
+    const showTies = $("showTies").checked, showSlurs = $("showSlurs").checked;
     const kind = $("kind").value, minorMode = $("minorMode").value;
     const keyStr = keyName(info.fifths, info.minor);
     const tempoStr = info.tempo ? `　速度每分鐘 ${info.tempo} 拍` : "";
@@ -372,6 +405,7 @@
         const beams = VF.Beam.generateBeams(vfNotes, { beam_rests: false });
         const voice = new VF.Voice({ num_beats: info.beats, beat_value: info.beatType }).setMode(VF.Voice.Mode.SOFT);
         voice.addTickables(vfNotes);
+        m.notes.forEach((n, i) => { n.vf = vfNotes[i]; n.row = r; });
         const fmt = new VF.Formatter();
         fmt.joinVoices([voice]);
         const startX = stave.getNoteStartX();
@@ -408,6 +442,18 @@
       const lyTop = baseY + 24 * k + LFS * 0.2;
       const H2 = baseY + 24 * k + (nVerse ? nVerse * LFS * 1.35 + 8 : 0);
       svg.setAttribute("viewBox", `0 0 ${W} ${H2}`);
+      // 五線譜上的連結線／圓滑線
+      if (showStaff) {
+        arcs.forEach((arc) => {
+          const inA = arc.a.row === r, inB = arc.b.row === r;
+          if (!inA && !inB) return;
+          if (arc.kind === "tie" && showTies) {
+            new VF.StaveTie({ first_note: inA ? arc.a.vf : null, last_note: inB ? arc.b.vf : null, first_indices: [0], last_indices: [0] }).setContext(ctx).draw();
+          } else if (arc.kind === "slur" && showSlurs && inA && inB) {
+            new VF.Curve(arc.a.vf, arc.b.vf, { cps: [{ x: 0, y: 10 }, { x: 0, y: 10 }] }).setContext(ctx).draw();
+          }
+        });
+      }
       const g = svgEl(svg, "g", {});
       const line = (x1, y1, x2, y2, wd) => svgEl(g, "line", { x1, y1, x2, y2, stroke: "#000", "stroke-width": wd || 1.2, "stroke-linecap": "butt" });
       const dot = (cx, cy) => svgEl(g, "circle", { cx, cy, r: 1.6 * k, fill: "#000" });
@@ -423,6 +469,7 @@
         const notes = b.notes, xs = b.xs.slice();
         for (let q = 1; q < xs.length; q++) { const mg = gapFor(notes[q - 1], notes[q]); if (xs[q] - xs[q - 1] < mg) xs[q] = xs[q - 1] + mg; }
         { const over = xs[xs.length - 1] - (b.x1 - FS * 0.65); if (over > 0) { const room = Math.max(0, xs[0] - (b.startX - FS * 0.2)); const sh = Math.min(over, room); for (let q = 0; q < xs.length; q++) xs[q] -= sh; } }
+        notes.forEach((n, i) => { n.cx = xs[i]; });
         const gm = measures[r * perRow + bi];
         const fif = gm.fifths;
         const levelsOf = (n) => (n.dur >= 1 - 1e-9 ? 0 : n.dur <= 0.25 + 1e-9 ? 2 : 1);
@@ -490,6 +537,25 @@
           });
         }
       });
+      // 簡譜行的連結線／圓滑線（弧線畫在數字上方）
+      arcs.forEach((arc) => {
+        if (!(arc.kind === "tie" ? showTies : showSlurs)) return;
+        const a = arc.a, b2 = arc.b;
+        const inA = a.row === r, inB = b2.row === r;
+        if (!inA && !inB) return;
+        const x1 = inA ? a.cx + a.hw * 0.55 : left + 2;
+        const x2 = inB ? b2.cx - b2.hw * 0.55 : W - left - 2;
+        if (x2 <= x1) return;
+        let top = Infinity;
+        arc.span.forEach((n) => {
+          if (n.row !== r) return;
+          const o = n.lab.oct > 0 ? n.lab.oct : 0;
+          top = Math.min(top, o ? baseY - FS * 0.78 - 4 * k - (o - 1) * 4.2 * k - 4 * k : baseY - FS * 0.8 - 3 * k);
+        });
+        if (!isFinite(top)) return;
+        const h = Math.min(FS * 0.5, 4 * k + (x2 - x1) * 0.06);
+        svgEl(g, "path", { d: `M${x1} ${top} Q${(x1 + x2) / 2} ${top - 2 * h} ${x2} ${top}`, fill: "none", stroke: "#000", "stroke-width": 1.1, "stroke-linecap": "round" });
+      });
     }
   }
 
@@ -520,7 +586,7 @@
     try { await loadText(await readFileText(f), false); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
   });
   $("sample").addEventListener("click", () => loadText(window.SAMPLE_XML, true));
-  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "lyricSize", "lyricText", "showStaff", "title", "composer", "singer", "subtitle"].forEach((id) => {
+  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "title", "composer", "singer", "subtitle"].forEach((id) => {
     $(id).addEventListener("input", (e) => { if (id === "title" || id === "composer") e.target.dataset.touched = "1"; render(); });
     $(id).addEventListener("change", render);
   });
