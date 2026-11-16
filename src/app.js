@@ -479,6 +479,7 @@
           rc.setAttribute("width", 2 * Math.max(n.hw, 6 * k) + 8);
           rc.setAttribute("height", Math.max(10, H2 - y0 - 2));
           rc.setAttribute("rx", 4);
+          rc.setAttribute("stroke", "none");
           rc.setAttribute("fill", "none");
           svg.insertBefore(rc, g);
           n.hl = rc;
@@ -749,11 +750,72 @@
   $("dlMidi").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + ".mid", buildMidi(), "audio/midi"); });
   $("dlXml").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + "_標註.musicxml", annotatedXml(), "application/vnd.recordare.musicxml+xml"); });
 
+  // ---------- 圖檔辨識（連到本機後端 backend/server.py） ----------
+  const omrBase = () => ($("omrUrl").value.trim() || "http://127.0.0.1:8765").replace(/\/+$/, "");
+  async function omrPing() {
+    const st = $("omrStatus");
+    try {
+      const ctl = new AbortController();
+      const to = setTimeout(() => ctl.abort(), 2500);
+      const r = await fetch(omrBase() + "/health", { signal: ctl.signal });
+      clearTimeout(to);
+      const j = await r.json();
+      st.textContent = j.homr ? "辨識服務：已連線 ✓" : "辨識服務已連線，但找不到 homr";
+      st.style.color = j.homr ? "#157347" : "#b42318";
+      return !!j.homr;
+    } catch (e) {
+      st.textContent = "辨識服務：未連線（先執行 backend/start.bat）";
+      st.style.color = "#b42318";
+      return false;
+    }
+  }
+  async function recognizeImage(file) {
+    const st = $("omrStatus");
+    $("err").textContent = "";
+    if (!(await omrPing())) { $("err").textContent = "連不上本機辨識服務。請先在電腦上執行 backend/start.bat（Mac／Linux 用 start.sh），看到「圖檔辨識服務啟動」後再試一次。"; return; }
+    st.textContent = "辨識中…（小圖約數秒，整頁樂譜可能要 1–3 分鐘，第一次還要下載模型）";
+    st.style.color = "#555";
+    $("omrBtn").disabled = true;
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("page", $("omrPage").value || "1");
+    try {
+      const r = await fetch(omrBase() + "/recognize", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.statusText);
+      showOriginal(file);
+      await loadText(j.musicxml, false);
+      $("title").value = file.name.replace(/\.[^.]+$/, "");
+      render();
+      st.textContent = "辨識完成。請對照原圖檢查音高與節奏，辨識結果可能有誤。";
+      st.style.color = "#157347";
+    } catch (e) {
+      st.textContent = "";
+      $("err").textContent = "辨識失敗：" + e.message;
+    } finally {
+      $("omrBtn").disabled = false;
+    }
+  }
+  function showOriginal(file) {
+    const box = $("origBox");
+    if (/^image\//.test(file.type)) {
+      const url = URL.createObjectURL(file);
+      box.innerHTML = '<details open><summary>原圖（對照用，不會列印）</summary><img alt="原圖"></details>';
+      box.querySelector("img").src = url;
+    } else {
+      box.innerHTML = "";
+    }
+  }
+  $("omrFile").addEventListener("change", (ev) => { const f = ev.target.files[0]; if (f) recognizeImage(f); ev.target.value = ""; });
+  $("omrUrl").addEventListener("change", omrPing);
+  omrPing();
+
   // drag & drop
   document.addEventListener("dragover", (e) => e.preventDefault());
   document.addEventListener("drop", async (e) => {
     e.preventDefault();
     const f = e.dataTransfer.files[0];
+    if (f && (/^image\//.test(f.type) || /\.pdf$/i.test(f.name))) { recognizeImage(f); return; }
     if (f) { try { await loadText(await readFileText(f), false); } catch (er) { $("err").textContent = "讀取失敗：" + er.message; } }
   });
 

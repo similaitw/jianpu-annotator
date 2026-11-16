@@ -18,6 +18,8 @@ input[type=file]{display:none}
 #meta{font-size:13px;color:#556;padding-bottom:8px}
 #err{color:#b42318;font-size:13px;width:100%}
 .lyr{width:100%;font-size:13px;color:#445}.lyr textarea{width:100%;font:inherit;font-size:14px;padding:6px 8px;border:1px solid #c5ccd5;border-radius:6px}
+.orig{margin-bottom:10px}.orig img{max-width:100%;border:1px solid #d5dbe2}
+@media print{.orig{display:none}}
 .hint{font-size:12px;color:#667;width:100%}
 .page{width:210mm;max-width:100%;margin:18px auto;background:#fff;padding:14mm 12mm;box-shadow:0 2px 12px rgba(0,0,0,.12)}
 .head{text-align:center;margin-bottom:6px}
@@ -32,6 +34,7 @@ input[type=file]{display:none}
 <div class="bar">
 <h2>簡譜標註器</h2>
 <label class="btn" style="display:inline-block;margin-bottom:0">選擇 MusicXML 檔<input id="file" type="file" accept=".musicxml,.xml,.mxl"></label>
+<label class="btn alt" id="omrBtn" style="display:inline-block;margin-bottom:0">從圖檔辨識（PNG／JPG／PDF）<input id="omrFile" type="file" accept="image/*,.pdf"></label>
 <button id="sample" class="alt" type="button">載入範例（小星星）</button>
 <label>標註<select id="kind"><option value="jianpu">簡譜 1 2 3</option><option value="solfege">唱名 Do Re Mi</option><option value="name">音名 C D E</option></select></label>
 <label>調式<select id="mode"><option value="movable">首調（1=主音）</option><option value="fixed">絕對音／原調（C=1，加升降）</option></select></label>
@@ -53,13 +56,20 @@ input[type=file]{display:none}
 <button id="dlMidi" class="alt" type="button">下載 MIDI</button>
 <button id="dlXml" class="alt" type="button">下載標註 MusicXML</button>
 <span id="meta"></span>
+<details class="lyr"><summary>圖檔辨識設定</summary>
+<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:6px 0">
+<label>本機服務位址<input id="omrUrl" type="text" value="http://127.0.0.1:8765" style="width:220px"></label>
+<label>PDF 頁碼<input id="omrPage" type="number" min="1" value="1"></label>
+<span id="omrStatus" style="font-size:13px"></span></div>
+<div class="hint" style="margin:0">圖檔只會送到你自己電腦上的辨識服務（backend/），不會上傳到網路。辨識用 homr；第一次執行會下載模型。</div>
+</details>
 <details class="lyr"><summary>貼上歌詞（會取代檔案裡的歌詞；一行一段）</summary>
 <textarea id="lyricText" rows="4" placeholder="中文每個字對應一個音；英文用空格或 - 分音節；用 _ 表示這個音沒有字"></textarea>
 </details>
 <div id="err"></div>
 <div class="hint">可直接把 .musicxml / .xml / .mxl 拖進視窗。所有處理都在你的瀏覽器內完成，檔案不會上傳。列印時請選 A4。目前只取第一聲部；和弦取最高音；連結線（tie）以兩個數字呈現。簡譜字級放大後若太擠，請把「每行小節數」調少。</div>
 </div>
-<div class="page"><div id="sheet"></div></div>
+<div class="page"><div id="origBox" class="orig"></div><div id="sheet"></div></div>
 <script>/*!
  * VexFlow 4.2.5   2024-05-12T08:56:23.690Z   5b5b43b18254cc5cf607a0977823900a375b48ed
  * Copyright (c) 2010 Mohit Muthanna Cheppudira <mohit@muthanna.com>
@@ -549,6 +559,7 @@ input[type=file]{display:none}
           rc.setAttribute("width", 2 * Math.max(n.hw, 6 * k) + 8);
           rc.setAttribute("height", Math.max(10, H2 - y0 - 2));
           rc.setAttribute("rx", 4);
+          rc.setAttribute("stroke", "none");
           rc.setAttribute("fill", "none");
           svg.insertBefore(rc, g);
           n.hl = rc;
@@ -819,11 +830,72 @@ input[type=file]{display:none}
   $("dlMidi").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + ".mid", buildMidi(), "audio/midi"); });
   $("dlXml").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + "_標註.musicxml", annotatedXml(), "application/vnd.recordare.musicxml+xml"); });
 
+  // ---------- 圖檔辨識（連到本機後端 backend/server.py） ----------
+  const omrBase = () => ($("omrUrl").value.trim() || "http://127.0.0.1:8765").replace(/\/+$/, "");
+  async function omrPing() {
+    const st = $("omrStatus");
+    try {
+      const ctl = new AbortController();
+      const to = setTimeout(() => ctl.abort(), 2500);
+      const r = await fetch(omrBase() + "/health", { signal: ctl.signal });
+      clearTimeout(to);
+      const j = await r.json();
+      st.textContent = j.homr ? "辨識服務：已連線 ✓" : "辨識服務已連線，但找不到 homr";
+      st.style.color = j.homr ? "#157347" : "#b42318";
+      return !!j.homr;
+    } catch (e) {
+      st.textContent = "辨識服務：未連線（先執行 backend/start.bat）";
+      st.style.color = "#b42318";
+      return false;
+    }
+  }
+  async function recognizeImage(file) {
+    const st = $("omrStatus");
+    $("err").textContent = "";
+    if (!(await omrPing())) { $("err").textContent = "連不上本機辨識服務。請先在電腦上執行 backend/start.bat（Mac／Linux 用 start.sh），看到「圖檔辨識服務啟動」後再試一次。"; return; }
+    st.textContent = "辨識中…（小圖約數秒，整頁樂譜可能要 1–3 分鐘，第一次還要下載模型）";
+    st.style.color = "#555";
+    $("omrBtn").disabled = true;
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("page", $("omrPage").value || "1");
+    try {
+      const r = await fetch(omrBase() + "/recognize", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || r.statusText);
+      showOriginal(file);
+      await loadText(j.musicxml, false);
+      $("title").value = file.name.replace(/\.[^.]+$/, "");
+      render();
+      st.textContent = "辨識完成。請對照原圖檢查音高與節奏，辨識結果可能有誤。";
+      st.style.color = "#157347";
+    } catch (e) {
+      st.textContent = "";
+      $("err").textContent = "辨識失敗：" + e.message;
+    } finally {
+      $("omrBtn").disabled = false;
+    }
+  }
+  function showOriginal(file) {
+    const box = $("origBox");
+    if (/^image\//.test(file.type)) {
+      const url = URL.createObjectURL(file);
+      box.innerHTML = '<details open><summary>原圖（對照用，不會列印）</summary><img alt="原圖"></details>';
+      box.querySelector("img").src = url;
+    } else {
+      box.innerHTML = "";
+    }
+  }
+  $("omrFile").addEventListener("change", (ev) => { const f = ev.target.files[0]; if (f) recognizeImage(f); ev.target.value = ""; });
+  $("omrUrl").addEventListener("change", omrPing);
+  omrPing();
+
   // drag & drop
   document.addEventListener("dragover", (e) => e.preventDefault());
   document.addEventListener("drop", async (e) => {
     e.preventDefault();
     const f = e.dataTransfer.files[0];
+    if (f && (/^image\//.test(f.type) || /\.pdf$/i.test(f.name))) { recognizeImage(f); return; }
     if (f) { try { await loadText(await readFileText(f), false); } catch (er) { $("err").textContent = "讀取失敗：" + er.message; } }
   });
 

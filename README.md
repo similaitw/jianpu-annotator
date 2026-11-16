@@ -17,6 +17,17 @@
 - 列印／存成 PDF（A4）
 - 單檔、內嵌 VexFlow，不需連網
 
+## 圖檔辨識（本機後端）
+網頁本身不上傳任何東西；要辨識圖檔時，網頁把圖傳到**你自己電腦上**的小服務，由它用 [homr](https://github.com/liebharc/homr)（開源 OMR）辨識成 MusicXML。
+
+1. 安裝 Python 3.10 以上
+2. Windows：連按兩下 `backend/start.bat`；Mac／Linux：`./backend/start.sh`
+   第一次會建立虛擬環境、安裝套件，第一次辨識時再下載模型（需要連網）
+3. 看到「圖檔辨識服務啟動：http://127.0.0.1:8765」後，回網頁按「從圖檔辨識」，或直接把圖檔拖進視窗
+4. 結果左上會顯示原圖方便對照。辨識**可能有誤**（音高、節奏、升降記號），請核對後再用
+
+說明：服務只綁定 127.0.0.1；圖太小會先放大 3 倍；PDF 可指定頁碼；整頁樂譜約 1–3 分鐘。在 Vercel 上的網頁一樣可以連本機服務（Chrome／Edge 允許 https 頁面呼叫 localhost）。
+
 ## 開發
 ```
 python3 build.py     # src/ + vendor/ → index.html
@@ -33,4 +44,4 @@ python3 build.py     # src/ + vendor/ → index.html
 2. ✅ 歌詞（讀檔內歌詞或貼上，多段、英文音節 `-`、`_` 跳過）　✅ 連結線（tie）與圓滑線（slur）弧線，五線譜與簡譜都畫，跨小節、跨行也處理
 3. ✅ 播放（亮色游標跟著音符走、可調速度）、下載 MIDI、下載標註後 MusicXML　⬜ 直接下載 PDF（目前用瀏覽器列印另存）
 4. 進階排版：多聲部、標註與五線譜分開調字級、頁首頁尾
-5. 圖檔辨識（PNG／JPG／PDF → MusicXML）：本機後端（FastAPI＋OMR），網頁連 `localhost`
+5. ✅ 圖檔辨識（PNG／JPG／PDF → MusicXML）：本機後端 `backend/`（FastAPI＋homr），網頁連 `127.0.0.1`　⬜ 辨識結果校正編輯器
