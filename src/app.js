@@ -146,12 +146,12 @@
         const tieStopB = !!(el.querySelector('tie[type="stop"]') || el.querySelector('notations tied[type="stop"]'));
         const slurs = [];
         el.querySelectorAll("notations slur").forEach((sl) => slurs.push({ type: sl.getAttribute("type"), num: sl.getAttribute("number") || "1" }));
-        notes.push({ rest, pitch, dur, start, tieStart, tieStop: tieStopB || !!tie, slurs, fileLy });
+        notes.push({ rest, pitch, dur, start, tieStart, tieStop: tieStopB || !!tie, slurs, fileLy, el });
       }
       const keyEl = m.querySelector("attributes key fifths");
       measures.push({ notes, fifths: keyNow.fifths, hasAttr: !!at });
     }
-    return { info, measures };
+    return { info, measures, doc };
   }
 
   // ---------- label conversion (簡譜／唱名／音名) ----------
@@ -270,6 +270,7 @@
   let parsed = null;
 
   function render() {
+    stopPlay();
     const out = $("sheet");
     out.innerHTML = "";
     if (!parsed) return;
@@ -469,7 +470,19 @@
         const notes = b.notes, xs = b.xs.slice();
         for (let q = 1; q < xs.length; q++) { const mg = gapFor(notes[q - 1], notes[q]); if (xs[q] - xs[q - 1] < mg) xs[q] = xs[q - 1] + mg; }
         { const over = xs[xs.length - 1] - (b.x1 - FS * 0.65); if (over > 0) { const room = Math.max(0, xs[0] - (b.startX - FS * 0.2)); const sh = Math.min(over, room); for (let q = 0; q < xs.length; q++) xs[q] -= sh; } }
-        notes.forEach((n, i) => { n.cx = xs[i]; });
+        notes.forEach((n, i) => {
+          n.cx = xs[i];
+          const rc = document.createElementNS(SVGNS, "rect");
+          const y0 = showStaff ? staveY - 14 : barTop - 6;
+          rc.setAttribute("x", xs[i] - Math.max(n.hw, 6 * k) - 4);
+          rc.setAttribute("y", y0);
+          rc.setAttribute("width", 2 * Math.max(n.hw, 6 * k) + 8);
+          rc.setAttribute("height", Math.max(10, H2 - y0 - 2));
+          rc.setAttribute("rx", 4);
+          rc.setAttribute("fill", "none");
+          svg.insertBefore(rc, g);
+          n.hl = rc;
+        });
         const gm = measures[r * perRow + bi];
         const fif = gm.fifths;
         const levelsOf = (n) => (n.dur >= 1 - 1e-9 ? 0 : n.dur <= 0.25 + 1e-9 ? 2 : 1);
@@ -559,6 +572,146 @@
     }
   }
 
+  // ---------- 播放與匯出 ----------
+  const midiOf = (p) => (p.octave + 1) * 12 + STEP_SEMI[STEP_IDX[p.step]] + p.alter;
+  function timeline() {
+    // 回傳 { notes:[{n,t,dur}], audio:[{midi,t,dur}], total }（單位：四分音符）
+    const { info, measures } = parsed;
+    const full = (info.beats * 4) / info.beatType;
+    let off = 0;
+    const ns = [], audio = [];
+    measures.forEach((m) => {
+      let end = 0;
+      m.notes.forEach((n) => (end = Math.max(end, n.start + n.dur)));
+      const len = end > 0 ? Math.max(end, 0) : full;
+      m.notes.forEach((n) => {
+        if (n.rest) return;
+        const t = off + n.start;
+        ns.push({ n, t, dur: n.dur });
+        const prev = audio[audio.length - 1];
+        if (n.tieStop && prev && prev.midi === midiOf(n.pitch) && Math.abs(prev.t + prev.dur - t) < 1e-6) prev.dur += n.dur;
+        else audio.push({ midi: midiOf(n.pitch), t, dur: n.dur });
+      });
+      off += len;
+    });
+    return { notes: ns, audio, total: off };
+  }
+
+  let actx = null, playing = false, raf = 0, curHl = null, t0 = 0, spq = 0.6, tl = null;
+  function stopPlay() {
+    playing = false;
+    cancelAnimationFrame(raf);
+    if (actx) { try { actx.close(); } catch (e) {} actx = null; }
+    if (curHl) { curHl.setAttribute("fill", "none"); curHl = null; }
+    $("play").textContent = "▶ 播放";
+  }
+  function startPlay() {
+    if (!parsed) return;
+    stopPlay();
+    tl = timeline();
+    const bpm = (parsed.info.tempo || 90) * ((parseFloat($("speed").value) || 100) / 100);
+    spq = 60 / bpm;
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = actx;
+    t0 = ctx.currentTime + 0.15;
+    const master = ctx.createGain();
+    master.gain.value = 0.28;
+    master.connect(ctx.destination);
+    tl.audio.forEach((e) => {
+      const f = 440 * Math.pow(2, (e.midi - 69) / 12);
+      const st = t0 + e.t * spq, du = Math.max(0.08, e.dur * spq * 0.97);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, st);
+      g.gain.linearRampToValueAtTime(1, st + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.35, st + Math.min(0.25, du * 0.5));
+      g.gain.setValueAtTime(0.35, st + du);
+      g.gain.exponentialRampToValueAtTime(0.0008, st + du + 0.18);
+      g.connect(master);
+      [["triangle", f, 1], ["sine", f * 2, 0.25]].forEach(([type, fr, vol]) => {
+        const o = ctx.createOscillator();
+        const gg = ctx.createGain();
+        gg.gain.value = vol;
+        o.type = type; o.frequency.value = fr;
+        o.connect(gg); gg.connect(g);
+        o.start(st); o.stop(st + du + 0.25);
+      });
+    });
+    playing = true;
+    $("play").textContent = "⏸ 停止";
+    const tick = () => {
+      if (!playing) return;
+      const q = (ctx.currentTime - t0) / spq;
+      if (q > tl.total + 0.3) { stopPlay(); return; }
+      let hit = null;
+      for (const e of tl.notes) if (q >= e.t - 1e-6 && q < e.t + e.dur - 1e-6) { hit = e.n; break; }
+      const rc = hit && hit.hl;
+      if (rc !== curHl) {
+        if (curHl) curHl.setAttribute("fill", "none");
+        curHl = rc || null;
+        if (curHl) {
+          curHl.setAttribute("fill", "rgba(255,193,7,0.38)");
+          const r = curHl.getBoundingClientRect();
+          if (r.top < 90 || r.bottom > window.innerHeight - 20) curHl.scrollIntoView({ block: "center", behavior: "smooth" });
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  }
+
+  function downloadBlob(name, data, mime) {
+    const a = document.createElement("a");
+    const url = URL.createObjectURL(new Blob([data], { type: mime }));
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+  function fileBase() { return ($("title").value.trim() || (parsed && parsed.info.title) || "score").replace(/[\\/:*?"<>|]/g, "_"); }
+
+  function buildMidi() {
+    const t = timeline();
+    const PPQ = 480;
+    const vlq = (v) => { const b = [v & 0x7f]; while ((v >>= 7)) b.unshift((v & 0x7f) | 0x80); return b; };
+    const ev = [];
+    t.audio.forEach((e) => {
+      const on = Math.round(e.t * PPQ), off = Math.round((e.t + e.dur) * PPQ);
+      ev.push([on, 1, [0x90, e.midi, 90]], [Math.max(on + 1, off - 4), 0, [0x80, e.midi, 0]]);
+    });
+    ev.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const bpm = parsed.info.tempo || 90;
+    const mpq = Math.round(60000000 / bpm);
+    const bytes = [0, 0xff, 0x51, 3, (mpq >> 16) & 255, (mpq >> 8) & 255, mpq & 255,
+      0, 0xff, 0x58, 4, parsed.info.beats, Math.round(Math.log2(parsed.info.beatType)), 24, 8,
+      0, 0xc0, 0];
+    let last = 0;
+    ev.forEach(([tk, , msg]) => { bytes.push(...vlq(tk - last), ...msg); last = tk; });
+    bytes.push(0, 0xff, 0x2f, 0);
+    const hdr = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1, PPQ >> 8, PPQ & 255];
+    const len = bytes.length;
+    const trk = [0x4d, 0x54, 0x72, 0x6b, (len >>> 24) & 255, (len >>> 16) & 255, (len >>> 8) & 255, len & 255];
+    return new Uint8Array([...hdr, ...trk, ...bytes]);
+  }
+
+  function annotatedXml() {
+    const ms = parsed.measures;
+    const kindZh = { jianpu: "簡譜", solfege: "唱名", name: "音名" }[$("kind").value];
+    ms.forEach((m) => m.notes.forEach((n) => {
+      if (!n.el || n.rest || !n.lab) return;
+      const dot = (n.lab.oct > 0 ? "\u0307".repeat(Math.min(3, n.lab.oct)) : "") + (n.lab.oct < 0 ? "\u0323".repeat(Math.min(3, -n.lab.oct)) : "");
+      const doc = n.el.ownerDocument;
+      const ly = doc.createElement("lyric");
+      ly.setAttribute("name", kindZh);
+      ly.setAttribute("number", "jp");
+      const sy = doc.createElement("syllabic"); sy.textContent = "single"; ly.appendChild(sy);
+      const tx = doc.createElement("text"); tx.textContent = n.lab.acc + n.lab.text + dot; ly.appendChild(tx);
+      n.el.appendChild(ly);
+    }));
+    const out = new XMLSerializer().serializeToString(parsed.doc);
+    // 還原，避免重複匯出時累積
+    ms.forEach((m) => m.notes.forEach((n) => { if (n.el) n.el.querySelectorAll('lyric[number="jp"]').forEach((x) => x.remove()); }));
+    return out;
+  }
+
   // ---------- UI ----------
   function applyInfoToFields() {
     const { info } = parsed;
@@ -591,6 +744,10 @@
     $(id).addEventListener("change", render);
   });
   $("print").addEventListener("click", () => window.print());
+  $("play").addEventListener("click", () => (playing ? stopPlay() : startPlay()));
+  $("speed").addEventListener("input", () => { $("speedv").textContent = $("speed").value + "%"; });
+  $("dlMidi").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + ".mid", buildMidi(), "audio/midi"); });
+  $("dlXml").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + "_標註.musicxml", annotatedXml(), "application/vnd.recordare.musicxml+xml"); });
 
   // drag & drop
   document.addEventListener("dragover", (e) => e.preventDefault());

@@ -48,6 +48,10 @@ input[type=file]{display:none}
 <label>演唱／來源<input id="singer" type="text"></label>
 <label>副標題（留空自動產生）<input id="subtitle" type="text" style="width:240px"></label>
 <button id="print" type="button">列印／存成 PDF</button>
+<button id="play" type="button">▶ 播放</button>
+<label>速度 <span id="speedv">100%</span><input id="speed" type="range" min="50" max="150" step="5" value="100" style="width:110px"></label>
+<button id="dlMidi" class="alt" type="button">下載 MIDI</button>
+<button id="dlXml" class="alt" type="button">下載標註 MusicXML</button>
 <span id="meta"></span>
 <details class="lyr"><summary>貼上歌詞（會取代檔案裡的歌詞；一行一段）</summary>
 <textarea id="lyricText" rows="4" placeholder="中文每個字對應一個音；英文用空格或 - 分音節；用 _ 表示這個音沒有字"></textarea>
