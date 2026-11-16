@@ -133,7 +133,16 @@
           continue;
         }
         const tie = el.querySelector('tie[type="stop"]') ? "stop" : "";
-        notes.push({ rest, pitch, dur, start, tieStop: !!tie });
+        const fileLy = [];
+        el.querySelectorAll("lyric").forEach((ly, li) => {
+          const num = parseInt(ly.getAttribute("number")) || li + 1;
+          let text = "";
+          ly.querySelectorAll("text").forEach((t) => (text += t.textContent));
+          const syl = (ly.querySelector("syllabic") || { textContent: "single" }).textContent.trim();
+          if (text.trim() === "" && !ly.querySelector("extend")) return;
+          fileLy[num - 1] = { text: text.trim(), hy: syl === "begin" || syl === "middle", ext: !!ly.querySelector("extend") };
+        });
+        notes.push({ rest, pitch, dur, start, tieStop: !!tie, fileLy });
       }
       const keyEl = m.querySelector("attributes key fifths");
       measures.push({ notes, fifths: keyNow.fifths, hasAttr: !!at });
@@ -172,6 +181,45 @@
     return { text: pick(deg), acc: accOf(a), oct };
   }
 
+  // ---------- lyrics ----------
+  const CJK = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/;
+  function tokenizeLyricLine(line) {
+    const clean = line.replace(/[，。、；：！？「」『』（）〈〉《》“”‘’…,.;:!?"()]/g, " ");
+    const out = [];
+    for (const word of clean.split(/\s+/)) {
+      if (!word) continue;
+      let buf = "";
+      const flush = (hy) => { if (buf) { out.push({ text: buf, hy: !!hy, ext: false }); buf = ""; } };
+      for (const ch of word) {
+        if (CJK.test(ch)) { flush(false); out.push({ text: ch, hy: false, ext: false }); }
+        else if (ch === "-" || ch === "‐") flush(true);
+        else if (ch === "_" || ch === "—" || ch === "－") { flush(false); out.push({ skip: true }); }
+        else buf += ch;
+      }
+      flush(false);
+    }
+    return out;
+  }
+  function assignLyrics(measures) {
+    const all = [];
+    measures.forEach((m) => m.notes.forEach((n) => { n.ly = []; all.push(n); }));
+    const raw = $("lyricText").value.trim();
+    if (raw) {
+      const sung = all.filter((n) => !n.rest);
+      raw.split(/\n+/).forEach((line, vi) => {
+        const toks = tokenizeLyricLine(line);
+        let ni = 0;
+        toks.forEach((tk) => {
+          if (ni >= sung.length) return;
+          if (!tk.skip) sung[ni].ly[vi] = tk;
+          ni++;
+        });
+      });
+    } else {
+      all.forEach((n) => { n.ly = n.fileLy || []; });
+    }
+  }
+
   function toVfDur(d) {
     let best = DURS[0], bd = 1e9;
     for (const x of DURS) { const e = Math.abs(x[0] - d); if (e < bd) { bd = e; best = x; } }
@@ -200,6 +248,9 @@
     const showStaff = $("showStaff").checked;
     const fifthsForJp = info.fifths;
 
+    const showLyrics = $("showLyrics").checked;
+    const LFS = Math.max(8, Math.min(30, parseFloat($("lyricSize").value) || 13));
+    assignLyrics(measures);
     const kind = $("kind").value, minorMode = $("minorMode").value;
     const keyStr = keyName(info.fifths, info.minor);
     const tempoStr = info.tempo ? `　速度每分鐘 ${info.tempo} 拍` : "";
@@ -254,8 +305,10 @@
         n.lab = n.rest ? { text: "0", acc: "", oct: 0 } : labelOf(n.pitch, kind, mode, m.fifths, info.minor, minorMode);
         n.hw = n.lab.text.length * 0.28 * FS;
         n.wd = 2 * n.hw + (n.lab.acc ? 0.4 * FS : 0);
+        n.lw = 0;
+        if (showLyrics) (n.ly || []).forEach((l) => { if (l && l.text) { let w = 0; for (const ch of l.text) w += CJK.test(ch) ? LFS : 0.55 * LFS; n.lw = Math.max(n.lw, w + (l.hy ? 0.5 * LFS : 0)); } });
       }));
-      const gapFor = (a, b2) => Math.max((a.dur < 1 - 1e-9 ? 0.95 : 0.9) * FS, a.wd / 2 + b2.wd / 2 + 0.3 * FS);
+      const gapFor = (a, b2) => Math.max((a.dur < 1 - 1e-9 ? 0.95 : 0.9) * FS, Math.max(a.wd, a.lw) / 2 + Math.max(b2.wd, b2.lw) / 2 + 0.3 * FS);
       const need = row.map((m, mi) => {
         let t = FS * 1.6 + (mi === 0 ? firstExtra : 0);
         m.notes.forEach((n, i) => { if (i > 0) t += gapFor(m.notes[i - 1], n); });
@@ -351,7 +404,9 @@
       const jpTop = showStaff ? Math.max(staveY + 78, lowY + 18) : 8; // 簡譜行頂端：避開五線譜最低處
             const baseY = jpTop + 10 + FS * 1.0 + 4 * k; // 數字基線
       const barTop = baseY - FS * 1.3, barBot = baseY + 10 * k;
-      const H2 = baseY + 24 * k;
+      const nVerse = showLyrics ? Math.max(0, ...row.flatMap((m) => m.notes.map((n) => (n.ly || []).length))) : 0;
+      const lyTop = baseY + 24 * k + LFS * 0.2;
+      const H2 = baseY + 24 * k + (nVerse ? nVerse * LFS * 1.35 + 8 : 0);
       svg.setAttribute("viewBox", `0 0 ${W} ${H2}`);
       const g = svgEl(svg, "g", {});
       const line = (x1, y1, x2, y2, wd) => svgEl(g, "line", { x1, y1, x2, y2, stroke: "#000", "stroke-width": wd || 1.2, "stroke-linecap": "butt" });
@@ -418,6 +473,22 @@
             } else k++;
           }
         }
+        // lyrics
+        if (nVerse) {
+          notes.forEach((n, i) => {
+            (n.ly || []).forEach((l, vi) => {
+              if (!l || !l.text) return;
+              const y = lyTop + LFS + vi * LFS * 1.35;
+              const label = nVerse > 1 ? "" : "";
+              svgEl(g, "text", { x: xs[i], y, "text-anchor": "middle", "font-size": LFS, "font-family": FONT }, l.text + label);
+              if (l.hy) {
+                const nx = i + 1 < notes.length ? xs[i + 1] : b.x1 - 6;
+                const hx = (xs[i] + n.lw / 2 + nx - ((notes[i + 1] && notes[i + 1].lw) || 0) / 2) / 2;
+                if (nx - xs[i] > 0) svgEl(g, "text", { x: hx, y, "text-anchor": "middle", "font-size": LFS, "font-family": FONT }, "-");
+              }
+            });
+          });
+        }
       });
     }
   }
@@ -449,7 +520,7 @@
     try { await loadText(await readFileText(f), false); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
   });
   $("sample").addEventListener("click", () => loadText(window.SAMPLE_XML, true));
-  ["kind", "mode", "minorMode", "perRow", "fontSize", "showStaff", "title", "composer", "singer", "subtitle"].forEach((id) => {
+  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "lyricSize", "lyricText", "showStaff", "title", "composer", "singer", "subtitle"].forEach((id) => {
     $(id).addEventListener("input", (e) => { if (id === "title" || id === "composer") e.target.dataset.touched = "1"; render(); });
     $(id).addEventListener("change", render);
   });
