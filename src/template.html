@@ -1,0 +1,54 @@
+'<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>簡譜標註器</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans TC","Noto Sans CJK TC","Microsoft JhengHei","PingFang TC",sans-serif;background:#eef1f4;color:#1b2430}
+.bar{background:#fff;border-bottom:1px solid #d5dbe2;padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end;position:sticky;top:0;z-index:5}
+.bar h2{margin:0 8px 0 0;font-size:18px;width:100%}
+label{display:flex;flex-direction:column;font-size:12px;color:#556;gap:3px}
+input[type=text],input[type=number],select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #c5ccd5;border-radius:6px;background:#fff;min-width:0}
+input[type=text]{width:150px}
+input[type=number]{width:64px}
+label.chk{flex-direction:row;align-items:center;gap:6px;font-size:14px;color:#1b2430;padding-bottom:6px}
+button,.btn{font:inherit;font-size:14px;padding:7px 14px;border-radius:6px;border:1px solid #2b6cb0;background:#2b6cb0;color:#fff;cursor:pointer}
+button.alt,.btn.alt{background:#fff;color:#2b6cb0}
+input[type=file]{display:none}
+#meta{font-size:13px;color:#556;padding-bottom:8px}
+#err{color:#b42318;font-size:13px;width:100%}
+.hint{font-size:12px;color:#667;width:100%}
+.page{width:210mm;max-width:100%;margin:18px auto;background:#fff;padding:14mm 12mm;box-shadow:0 2px 12px rgba(0,0,0,.12)}
+.head{text-align:center;margin-bottom:6px}
+.head h1{font-size:22px;margin:0 0 4px;font-family:"Noto Serif TC","Noto Serif CJK TC","PMingLiU",serif}
+.head .sub{margin:0 0 6px;font-size:13px;font-weight:700;font-family:"Noto Serif TC","Noto Serif CJK TC",serif}
+.head .by{margin:0;text-align:right;font-size:12px;display:flex;flex-direction:column}
+.row{break-inside:avoid;margin-bottom:4px}
+.row svg{display:block}
+@page{size:A4;margin:10mm}
+@media print{body{background:#fff}.bar{display:none}.page{box-shadow:none;margin:0;padding:0;width:auto}}
+</style></head><body>
+<div class="bar">
+<h2>簡譜標註器</h2>
+<label class="btn" style="display:inline-block;margin-bottom:0">選擇 MusicXML 檔<input id="file" type="file" accept=".musicxml,.xml,.mxl"></label>
+<button id="sample" class="alt" type="button">載入範例（小星星）</button>
+<label>標註<select id="kind"><option value="jianpu">簡譜 1 2 3</option><option value="solfege">唱名 Do Re Mi</option><option value="name">音名 C D E</option></select></label>
+<label>調式<select id="mode"><option value="movable">首調（1=主音）</option><option value="fixed">絕對音／原調（C=1，加升降）</option></select></label>
+<label>小調主音<select id="minorMode"><option value="la">6 為主音（la）</option><option value="do">1 為主音（do）</option></select></label>
+<label>每行小節數<input id="perRow" type="number" min="1" max="8" value="4"></label>
+<label>簡譜字級<input id="fontSize" type="number" min="10" max="36" step="1" value="17"></label>
+<label class="chk"><input id="showStaff" type="checkbox" checked>顯示五線譜</label>
+<label>標題<input id="title" type="text"></label>
+<label>作曲<input id="composer" type="text"></label>
+<label>演唱／來源<input id="singer" type="text"></label>
+<label>副標題（留空自動產生）<input id="subtitle" type="text" style="width:240px"></label>
+<button id="print" type="button">列印／存成 PDF</button>
+<span id="meta"></span>
+<div id="err"></div>
+<div class="hint">可直接把 .musicxml / .xml / .mxl 拖進視窗。所有處理都在你的瀏覽器內完成，檔案不會上傳。列印時請選 A4。目前只取第一聲部；和弦取最高音；連結線（tie）以兩個數字呈現。簡譜字級放大後若太擠，請把「每行小節數」調少。</div>
+</div>
+<div class="page"><div id="sheet"></div></div>
+<script>%%VEXFLOW%%</script>
+<script>%%SAMPLE%%</script>
+<script>%%APP%%</script>
+</body></html>
