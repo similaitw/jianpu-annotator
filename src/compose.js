@@ -287,7 +287,7 @@
     $(id).addEventListener("change", edSchedule);
   });
   $("edClear").addEventListener("click", () => { $("edText").value = ""; $("edErr").textContent = ""; });
-  $("edExample").addEventListener("click", () => { $("edText").value = "1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -"; $("edKey").value = "0"; $("edMode").value = "movable"; $("edTitle").value = "輸入範例"; applyEditor(); });
+  $("edExample").addEventListener("click", () => { $("edText").value = "1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -"; $("edKey").value = "0"; $("edMode").value = "fixed"; $("edTitle").value = "輸入範例"; applyEditor(); });
   $("midiGo").addEventListener("click", convertMidi);
   $("midiCancel").addEventListener("click", () => { $("midiPanel").hidden = true; });
   (function fillKeys() {

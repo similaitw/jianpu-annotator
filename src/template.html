@@ -49,7 +49,7 @@ input[type=file]{display:none}
 <label class="btn alt omr-only" id="omrBtn" style="display:inline-block;margin-bottom:0">從圖檔辨識（PNG／JPG／PDF）<input id="omrFile" type="file" accept="image/*,.pdf"></label>
 <button id="sample" class="alt" type="button">載入範例（小星星）</button>
 <label>標註<select id="kind"><option value="jianpu">簡譜 1 2 3</option><option value="solfege">唱名 Do Re Mi</option><option value="name">音名 C D E</option></select></label>
-<label>調式<select id="mode"><option value="movable">首調（1=主音）</option><option value="fixed">絕對音／原調（C=1，加升降）</option></select></label>
+<label>調式<select id="mode"><option value="fixed" selected>絕對音／原調（C=1，加升降）</option><option value="movable">首調（1=主音）</option></select></label>
 <label>小調主音<select id="minorMode"><option value="la">6 為主音（la）</option><option value="do">1 為主音（do）</option></select></label>
 <label>每行小節數<input id="perRow" type="number" min="1" max="8" value="4"></label>
 <label>簡譜字級<input id="fontSize" type="number" min="10" max="36" step="1" value="17"></label>
@@ -123,7 +123,7 @@ input[type=file]{display:none}
 <label>拍號<span class="inl"><input id="edBeats" type="number" min="1" max="16" value="4"> / <input id="edBeatType" type="number" min="1" max="16" value="4"></span></label>
 <label>速度<input id="edTempo" type="number" min="20" max="300" value="90"></label>
 <label>譜號<select id="edClef"><option value="treble">高音</option><option value="bass">低音</option></select></label>
-<label>音高對應<select id="edMode"><option value="movable">首調（1＝調號主音）</option><option value="fixed">絕對音（1＝C）</option></select></label>
+<label>音高對應<select id="edMode"><option value="fixed" selected>絕對音（1＝C）</option><option value="movable">首調（1＝調號主音）</option></select></label>
 </div>
 <textarea id="edText" rows="4" placeholder="例：1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -"></textarea>
 <div class="hint" style="margin:6px 0;line-height:1.7">
