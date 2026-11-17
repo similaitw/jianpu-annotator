@@ -479,6 +479,12 @@
 
       bars.forEach((b, bi) => {
         const notes = b.notes, xs = b.xs.slice();
+        // 每行第一小節（前面有譜號、調號）：可選擇讓簡譜不對齊五線譜，改成與小節線前後等距
+        if (bi === 0 && $("firstFree").checked && xs.length > 1) {
+          const pad = b.x1 - xs[xs.length - 1], a0 = xs[0], a1 = xs[xs.length - 1];
+          const n0 = b.x0 + pad, n1 = b.x1 - pad;
+          if (a1 > a0) for (let q = 0; q < xs.length; q++) xs[q] = n0 + ((xs[q] - a0) * (n1 - n0)) / (a1 - a0);
+        }
         for (let q = 1; q < xs.length; q++) { const mg = gapFor(notes[q - 1], notes[q]); if (xs[q] - xs[q - 1] < mg) xs[q] = xs[q - 1] + mg; }
         { const over = xs[xs.length - 1] - (b.x1 - FS * 0.65); if (over > 0) { const room = Math.max(0, xs[0] - (b.startX - FS * 0.2)); const sh = Math.min(over, room); for (let q = 0; q < xs.length; q++) xs[q] -= sh; } }
         notes.forEach((n, i) => {
@@ -753,7 +759,7 @@
     try { await openAnyFile(f); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
   });
   $("sample").addEventListener("click", () => loadText(window.SAMPLE_XML, true));
-  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "title", "composer", "singer", "subtitle"].forEach((id) => {
+  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "firstFree", "title", "composer", "singer", "subtitle"].forEach((id) => {
     $(id).addEventListener("input", (e) => { if (id === "title" || id === "composer") e.target.dataset.touched = "1"; render(); });
     $(id).addEventListener("change", render);
   });
