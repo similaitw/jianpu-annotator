@@ -541,7 +541,18 @@ input[type=file]{display:none}
         fmt.joinVoices([voice]);
         const startX = stave.getNoteStartX();
         const avail = x + w - startX - 12;
-        fmt.format([voice], Math.max(40, avail));
+        let availW = Math.max(40, avail);
+        fmt.format([voice], availW);
+        // 讓小節前後留白相等：第一個音距離小節線＝最後一個音距離下一條小節線（長音結尾除外）
+        vfNotes.forEach((sn) => sn.setStave(stave));
+        const ctrX = (sn) => (sn.getNoteHeadBeginX() + sn.getNoteHeadEndX()) / 2;
+        for (let it = 0; it < 3; it++) {
+          const lead = ctrX(vfNotes[0]) - (startX - 5), trail = x + w - ctrX(vfNotes[vfNotes.length - 1]);
+          const d = lead - trail;
+          if (trail > 40 || Math.abs(d) < 0.8) break;
+          availW = Math.max(40, availW - d);
+          fmt.format([voice], availW);
+        }
         if (showStaff) {
           voice.draw(ctx, stave);
           beams.forEach((b) => b.setContext(ctx).draw());
