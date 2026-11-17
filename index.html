@@ -58,7 +58,6 @@ input[type=file]{display:none}
 <label class="chk"><input id="showLyrics" type="checkbox" checked>顯示歌詞</label>
 <label>歌詞字級<input id="lyricSize" type="number" min="8" max="30" step="1" value="13"></label>
 <label class="chk"><input id="showStaff" type="checkbox" checked>顯示五線譜</label>
-<label class="chk"><input id="firstFree" type="checkbox">第一小節簡譜不對齊（前後等距）</label>
 <label>標題<input id="title" type="text"></label>
 <label>作曲<input id="composer" type="text"></label>
 <label>演唱／來源<input id="singer" type="text"></label>
@@ -621,7 +620,9 @@ input[type=file]{display:none}
       const line = (x1, y1, x2, y2, wd) => svgEl(g, "line", { x1, y1, x2, y2, stroke: "#000", "stroke-width": wd || 1.2, "stroke-linecap": "butt" });
       const dot = (cx, cy) => svgEl(g, "circle", { cx, cy, r: 1.6 * k, fill: "#000" });
       // 起始小節線與各小節線（只畫在簡譜行，與五線譜分開）
-      line(left + 0.6, barTop, left + 0.6, barBot, 1.2);
+      // 起始線內縮到譜號、調號之後（與五線譜音符起點相同基準），讓每個小節前後留白一致
+      const jpStart = bars[0].startX - 5 - num("barPad", 0, 0, 40);
+      line(jpStart + 0.6, barTop, jpStart + 0.6, barBot, 1.2);
       bars.forEach((b, bi) => {
         const last = r * perRow + bi === measures.length - 1;
         if (last) { line(b.x1 - 4.5, barTop, b.x1 - 4.5, barBot, 1.2); line(b.x1 - 0.8, barTop, b.x1 - 0.8, barBot, 3); }
@@ -630,14 +631,6 @@ input[type=file]{display:none}
 
       bars.forEach((b, bi) => {
         const notes = b.notes, xs = b.xs.slice();
-        // 每行第一小節（前面有譜號、調號）：可選擇讓簡譜不對齊五線譜，改成與小節線前後等距
-        if (bi === 0 && $("firstFree").checked && xs.length > 1) {
-          const pad = b.x1 - xs[xs.length - 1], a0 = xs[0], a1 = xs[xs.length - 1];
-          const n0 = b.x0 + pad, n1 = b.x1 - pad;
-          if (a1 > a0) for (let q = 0; q < xs.length; q++) xs[q] = n0 + ((xs[q] - a0) * (n1 - n0)) / (a1 - a0);
-        }
-        for (let q = 1; q < xs.length; q++) { const mg = gapFor(notes[q - 1], notes[q]); if (xs[q] - xs[q - 1] < mg) xs[q] = xs[q - 1] + mg; }
-        { const over = xs[xs.length - 1] - (b.x1 - FS * 0.65); if (over > 0) { const room = Math.max(0, xs[0] - (b.startX - FS * 0.2)); const sh = Math.min(over, room); for (let q = 0; q < xs.length; q++) xs[q] -= sh; } }
         notes.forEach((n, i) => {
           n.cx = xs[i];
           const rc = document.createElementNS(SVGNS, "rect");
@@ -1196,13 +1189,13 @@ input[type=file]{display:none}
   }
 
     // ---------- 版面設定面板：數字設定、預設組、記憶、匯入／匯出 ----------
-  const LAYOUT_IDS = ["perRow", "fontSize", "lyricSize", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "showTies", "showSlurs", "showLyrics", "showStaff", "firstFree"];
-  const LAYOUT_DEFAULT = { perRow: 4, fontSize: 17, lyricSize: 13, sideMargin: 14, barPad: 0, rowGap: 4, jpGap: 0, lyLine: 1.35, showTies: true, showSlurs: true, showLyrics: true, showStaff: true, firstFree: false };
+  const LAYOUT_IDS = ["perRow", "fontSize", "lyricSize", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "showTies", "showSlurs", "showLyrics", "showStaff"];
+  const LAYOUT_DEFAULT = { perRow: 4, fontSize: 17, lyricSize: 13, sideMargin: 14, barPad: 0, rowGap: 4, jpGap: 0, lyLine: 1.35, showTies: true, showSlurs: true, showLyrics: true, showStaff: true };
   const LAYOUT_PRESETS = {
     "預設": {},
     "A4 緊湊（每行 5 小節）": { perRow: 5, fontSize: 15, lyricSize: 12, sideMargin: 10, rowGap: 2 },
     "大字教學（每行 3 小節）": { perRow: 3, fontSize: 24, lyricSize: 17, sideMargin: 16, rowGap: 8, jpGap: 4 },
-    "只看簡譜": { perRow: 4, showStaff: false, firstFree: true, jpGap: 0 },
+    "只看簡譜": { perRow: 4, showStaff: false, jpGap: 0 },
   };
   function readLayout() {
     const o = {};
@@ -1265,7 +1258,7 @@ input[type=file]{display:none}
     try { await openAnyFile(f); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
   });
   $("sample").addEventListener("click", () => loadText(window.SAMPLE_XML, true));
-  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "firstFree", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "title", "composer", "singer", "subtitle"].forEach((id) => {
+  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "title", "composer", "singer", "subtitle"].forEach((id) => {
     $(id).addEventListener("input", (e) => { if (id === "title" || id === "composer") e.target.dataset.touched = "1"; render(); });
     $(id).addEventListener("change", render);
   });

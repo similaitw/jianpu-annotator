@@ -1,11 +1,11 @@
   // ---------- 版面設定面板：數字設定、預設組、記憶、匯入／匯出 ----------
-  const LAYOUT_IDS = ["perRow", "fontSize", "lyricSize", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "showTies", "showSlurs", "showLyrics", "showStaff", "firstFree"];
-  const LAYOUT_DEFAULT = { perRow: 4, fontSize: 17, lyricSize: 13, sideMargin: 14, barPad: 0, rowGap: 4, jpGap: 0, lyLine: 1.35, showTies: true, showSlurs: true, showLyrics: true, showStaff: true, firstFree: false };
+  const LAYOUT_IDS = ["perRow", "fontSize", "lyricSize", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "showTies", "showSlurs", "showLyrics", "showStaff"];
+  const LAYOUT_DEFAULT = { perRow: 4, fontSize: 17, lyricSize: 13, sideMargin: 14, barPad: 0, rowGap: 4, jpGap: 0, lyLine: 1.35, showTies: true, showSlurs: true, showLyrics: true, showStaff: true };
   const LAYOUT_PRESETS = {
     "預設": {},
     "A4 緊湊（每行 5 小節）": { perRow: 5, fontSize: 15, lyricSize: 12, sideMargin: 10, rowGap: 2 },
     "大字教學（每行 3 小節）": { perRow: 3, fontSize: 24, lyricSize: 17, sideMargin: 16, rowGap: 8, jpGap: 4 },
-    "只看簡譜": { perRow: 4, showStaff: false, firstFree: true, jpGap: 0 },
+    "只看簡譜": { perRow: 4, showStaff: false, jpGap: 0 },
   };
   function readLayout() {
     const o = {};
