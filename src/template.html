@@ -100,6 +100,21 @@ input[type=file]{display:none}
 <button id="midiGo" type="button">轉換並載入</button> <button id="midiCancel" class="alt" type="button">取消</button>
 <span id="midiErr" class="err"></span>
 </div>
+<details id="layPanel" class="panel"><summary>版面設定</summary>
+<div class="grid">
+<label>預設組<select id="layPreset"></select></label>
+<label>左右邊距（px）<input id="sideMargin" type="number" min="0" max="60" step="1" value="14"></label>
+<label>小節內側留白（px）<input id="barPad" type="number" min="0" max="40" step="1" value="0"></label>
+<label>行與行間距（px）<input id="rowGap" type="number" min="0" max="60" step="1" value="4"></label>
+<label>簡譜與五線譜距離（±px）<input id="jpGap" type="number" min="-20" max="80" step="1" value="0"></label>
+<label>歌詞行距（倍）<input id="lyLine" type="number" min="1" max="2.5" step="0.05" value="1.35"></label>
+</div>
+<div class="hint" style="margin:4px 0">每行小節數、簡譜字級、歌詞字級、顯示項目在上方工具列，也會一起記住。設定會自動存在這個瀏覽器，下次開啟沿用。</div>
+<button id="layReset" class="alt" type="button">恢復預設</button>
+<button id="layExport" class="alt" type="button">匯出設定檔</button>
+<label class="btn alt" style="display:inline-block;margin:0">匯入設定檔<input id="layImport" type="file" accept=".json"></label>
+<span id="layErr" class="err"></span>
+</details>
 <details id="edPanel" class="panel"><summary>線上編寫（簡譜文字輸入）</summary>
 <div class="grid">
 <label>標題<input id="edTitle" type="text"></label>

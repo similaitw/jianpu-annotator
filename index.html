@@ -100,6 +100,21 @@ input[type=file]{display:none}
 <button id="midiGo" type="button">轉換並載入</button> <button id="midiCancel" class="alt" type="button">取消</button>
 <span id="midiErr" class="err"></span>
 </div>
+<details id="layPanel" class="panel"><summary>版面設定</summary>
+<div class="grid">
+<label>預設組<select id="layPreset"></select></label>
+<label>左右邊距（px）<input id="sideMargin" type="number" min="0" max="60" step="1" value="14"></label>
+<label>小節內側留白（px）<input id="barPad" type="number" min="0" max="40" step="1" value="0"></label>
+<label>行與行間距（px）<input id="rowGap" type="number" min="0" max="60" step="1" value="4"></label>
+<label>簡譜與五線譜距離（±px）<input id="jpGap" type="number" min="-20" max="80" step="1" value="0"></label>
+<label>歌詞行距（倍）<input id="lyLine" type="number" min="1" max="2.5" step="0.05" value="1.35"></label>
+</div>
+<div class="hint" style="margin:4px 0">每行小節數、簡譜字級、歌詞字級、顯示項目在上方工具列，也會一起記住。設定會自動存在這個瀏覽器，下次開啟沿用。</div>
+<button id="layReset" class="alt" type="button">恢復預設</button>
+<button id="layExport" class="alt" type="button">匯出設定檔</button>
+<label class="btn alt" style="display:inline-block;margin:0">匯入設定檔<input id="layImport" type="file" accept=".json"></label>
+<span id="layErr" class="err"></span>
+</details>
 <details id="edPanel" class="panel"><summary>線上編寫（簡譜文字輸入）</summary>
 <div class="grid">
 <label>標題<input id="edTitle" type="text"></label>
@@ -400,6 +415,8 @@ input[type=file]{display:none}
 
   let parsed = null;
 
+  const num = (id, d, lo, hi) => { const v = parseFloat($(id).value); return Math.max(lo, Math.min(hi, Number.isFinite(v) ? v : d)); };
+
   function render() {
     stopPlay();
     const out = $("sheet");
@@ -449,6 +466,7 @@ input[type=file]{display:none}
       const row = measures.slice(r * perRow, r * perRow + perRow);
       const div = document.createElement("div");
       div.className = "row";
+      div.style.marginBottom = num("rowGap", 4, 0, 60) + "px";
       out.appendChild(div);
       const H = showStaff ? 175 : 95;
       const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
@@ -459,7 +477,7 @@ input[type=file]{display:none}
       svg.removeAttribute("width"); svg.removeAttribute("height");
       svg.style.width = "100%"; svg.style.height = "auto";
 
-      const left = 14, usable = W - 2 * left;
+      const left = num("sideMargin", 14, 0, 60), usable = W - 2 * left;
       const firstExtra = 60;
       const unit = (usable - firstExtra) / row.length;
       const staveY = 38;
@@ -491,6 +509,8 @@ input[type=file]{display:none}
         const gi = r * perRow + mi;
         const w = wArr[mi];
         const stave = new VF.Stave(x, staveY, w);
+        const barPad = num("barPad", 0, 0, 40);
+        if (barPad) stave.setNoteStartX(stave.getNoteStartX() + barPad);
         if (mi === 0) {
           stave.addClef(info.clef);
           stave.addKeySignature(minorKey);
@@ -548,7 +568,7 @@ input[type=file]{display:none}
         vfNotes.forEach((sn) => sn.setStave(stave));
         const ctrX = (sn) => (sn.getNoteHeadBeginX() + sn.getNoteHeadEndX()) / 2;
         for (let it = 0; it < 3; it++) {
-          const lead = ctrX(vfNotes[0]) - (startX - 5), trail = x + w - ctrX(vfNotes[vfNotes.length - 1]);
+          const lead = ctrX(vfNotes[0]) - (startX - 5 - barPad), trail = x + w - ctrX(vfNotes[vfNotes.length - 1]);
           const d = lead - trail;
           if (trail > 40 || Math.abs(d) < 0.8) break;
           availW = Math.max(40, availW - d);
@@ -578,12 +598,12 @@ input[type=file]{display:none}
       });
 
       // jianpu line ----------------------------------------------------
-      const jpTop = showStaff ? Math.max(staveY + 78, lowY + 18) : 8; // 簡譜行頂端：避開五線譜最低處
+      const jpTop = showStaff ? Math.max(staveY + 78, lowY + 18) + num("jpGap", 0, -20, 80) : 8; // 簡譜行頂端：避開五線譜最低處
             const baseY = jpTop + 10 + FS * 1.0 + 4 * k; // 數字基線
       const barTop = baseY - FS * 1.3, barBot = baseY + 10 * k;
       const nVerse = showLyrics ? Math.max(0, ...row.flatMap((m) => m.notes.map((n) => (n.ly || []).length))) : 0;
       const lyTop = baseY + 24 * k + LFS * 0.2;
-      const H2 = baseY + 24 * k + (nVerse ? nVerse * LFS * 1.35 + 8 : 0);
+      const H2 = baseY + 24 * k + (nVerse ? nVerse * LFS * num("lyLine", 1.35, 1, 2.5) + 8 : 0);
       svg.setAttribute("viewBox", `0 0 ${W} ${H2}`);
       // 五線譜上的連結線／圓滑線
       if (showStaff) {
@@ -687,7 +707,7 @@ input[type=file]{display:none}
           notes.forEach((n, i) => {
             (n.ly || []).forEach((l, vi) => {
               if (!l || !l.text) return;
-              const y = lyTop + LFS + vi * LFS * 1.35;
+              const y = lyTop + LFS + vi * LFS * num("lyLine", 1.35, 1, 2.5);
               const label = nVerse > 1 ? "" : "";
               svgEl(g, "text", { x: xs[i], y, "text-anchor": "middle", "font-size": LFS, "font-family": FONT }, l.text + label);
               if (l.hy) {
@@ -861,6 +881,7 @@ input[type=file]{display:none}
     return out;
   }
 
+  const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
     // =====================================================================
   //  匯入 MIDI → MusicXML、線上編寫（簡譜文字輸入）→ MusicXML
   //  共用流程：事件序列 → layoutEvents（切小節、拆音值、加連結線）→ buildMusicXml → loadText
@@ -1174,6 +1195,48 @@ input[type=file]{display:none}
     await loadText(text, false);
   }
 
+    // ---------- 版面設定面板：數字設定、預設組、記憶、匯入／匯出 ----------
+  const LAYOUT_IDS = ["perRow", "fontSize", "lyricSize", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "showTies", "showSlurs", "showLyrics", "showStaff", "firstFree"];
+  const LAYOUT_DEFAULT = { perRow: 4, fontSize: 17, lyricSize: 13, sideMargin: 14, barPad: 0, rowGap: 4, jpGap: 0, lyLine: 1.35, showTies: true, showSlurs: true, showLyrics: true, showStaff: true, firstFree: false };
+  const LAYOUT_PRESETS = {
+    "預設": {},
+    "A4 緊湊（每行 5 小節）": { perRow: 5, fontSize: 15, lyricSize: 12, sideMargin: 10, rowGap: 2 },
+    "大字教學（每行 3 小節）": { perRow: 3, fontSize: 24, lyricSize: 17, sideMargin: 16, rowGap: 8, jpGap: 4 },
+    "只看簡譜": { perRow: 4, showStaff: false, firstFree: true, jpGap: 0 },
+  };
+  function readLayout() {
+    const o = {};
+    LAYOUT_IDS.forEach((id) => { const el = $(id); o[id] = el.type === "checkbox" ? el.checked : parseFloat(el.value); });
+    return o;
+  }
+  function writeLayout(o) {
+    LAYOUT_IDS.forEach((id) => {
+      if (!(id in o)) return;
+      const el = $(id);
+      if (el.type === "checkbox") el.checked = !!o[id]; else if (Number.isFinite(+o[id])) el.value = o[id];
+    });
+  }
+  function saveLayout() { store.set("jpLayout", JSON.stringify(readLayout())); }
+  function applyLayout(o, doRender) {
+    writeLayout({ ...LAYOUT_DEFAULT, ...o });
+    saveLayout();
+    if (doRender !== false) render();
+  }
+  (function initLayout() {
+    try { const s = store.get("jpLayout"); if (s) writeLayout(JSON.parse(s)); } catch (e) {}
+    const sel = $("layPreset");
+    Object.keys(LAYOUT_PRESETS).forEach((n) => { const o = document.createElement("option"); o.textContent = n; sel.appendChild(o); });
+    sel.addEventListener("change", () => { applyLayout(LAYOUT_PRESETS[sel.value] || {}); });
+    $("layReset").addEventListener("click", () => { sel.value = "預設"; applyLayout({}); });
+    $("layExport").addEventListener("click", () => downloadBlob("版面設定.json", JSON.stringify(readLayout(), null, 2), "application/json"));
+    $("layImport").addEventListener("change", async (e) => {
+      const f = e.target.files[0]; e.target.value = "";
+      if (!f) return;
+      try { applyLayout(JSON.parse(await f.text())); $("layErr").textContent = ""; } catch (er) { $("layErr").textContent = "匯入失敗：不是有效的版面設定檔"; }
+    });
+    LAYOUT_IDS.forEach((id) => { $(id).addEventListener("input", saveLayout); $(id).addEventListener("change", saveLayout); });
+  })();
+
 
   // ---------- UI ----------
   function applyInfoToFields() {
@@ -1202,7 +1265,7 @@ input[type=file]{display:none}
     try { await openAnyFile(f); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
   });
   $("sample").addEventListener("click", () => loadText(window.SAMPLE_XML, true));
-  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "firstFree", "title", "composer", "singer", "subtitle"].forEach((id) => {
+  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "firstFree", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "title", "composer", "singer", "subtitle"].forEach((id) => {
     $(id).addEventListener("input", (e) => { if (id === "title" || id === "composer") e.target.dataset.touched = "1"; render(); });
     $(id).addEventListener("change", render);
   });
@@ -1223,7 +1286,6 @@ input[type=file]{display:none}
   const omrBase = () => ($("omrUrl").value.trim() || "http://127.0.0.1:8765").replace(/\/+$/, "");
   let omrJobs = false;
   const omrHeaders = () => { const k = $("omrKey").value.trim(); return k ? { "X-API-Key": k } : {}; };
-  const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
   async function omrPing() {
     const st = $("omrStatus");
     try {

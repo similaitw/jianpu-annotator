@@ -269,6 +269,8 @@
 
   let parsed = null;
 
+  const num = (id, d, lo, hi) => { const v = parseFloat($(id).value); return Math.max(lo, Math.min(hi, Number.isFinite(v) ? v : d)); };
+
   function render() {
     stopPlay();
     const out = $("sheet");
@@ -318,6 +320,7 @@
       const row = measures.slice(r * perRow, r * perRow + perRow);
       const div = document.createElement("div");
       div.className = "row";
+      div.style.marginBottom = num("rowGap", 4, 0, 60) + "px";
       out.appendChild(div);
       const H = showStaff ? 175 : 95;
       const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
@@ -328,7 +331,7 @@
       svg.removeAttribute("width"); svg.removeAttribute("height");
       svg.style.width = "100%"; svg.style.height = "auto";
 
-      const left = 14, usable = W - 2 * left;
+      const left = num("sideMargin", 14, 0, 60), usable = W - 2 * left;
       const firstExtra = 60;
       const unit = (usable - firstExtra) / row.length;
       const staveY = 38;
@@ -360,6 +363,8 @@
         const gi = r * perRow + mi;
         const w = wArr[mi];
         const stave = new VF.Stave(x, staveY, w);
+        const barPad = num("barPad", 0, 0, 40);
+        if (barPad) stave.setNoteStartX(stave.getNoteStartX() + barPad);
         if (mi === 0) {
           stave.addClef(info.clef);
           stave.addKeySignature(minorKey);
@@ -417,7 +422,7 @@
         vfNotes.forEach((sn) => sn.setStave(stave));
         const ctrX = (sn) => (sn.getNoteHeadBeginX() + sn.getNoteHeadEndX()) / 2;
         for (let it = 0; it < 3; it++) {
-          const lead = ctrX(vfNotes[0]) - (startX - 5), trail = x + w - ctrX(vfNotes[vfNotes.length - 1]);
+          const lead = ctrX(vfNotes[0]) - (startX - 5 - barPad), trail = x + w - ctrX(vfNotes[vfNotes.length - 1]);
           const d = lead - trail;
           if (trail > 40 || Math.abs(d) < 0.8) break;
           availW = Math.max(40, availW - d);
@@ -447,12 +452,12 @@
       });
 
       // jianpu line ----------------------------------------------------
-      const jpTop = showStaff ? Math.max(staveY + 78, lowY + 18) : 8; // 簡譜行頂端：避開五線譜最低處
+      const jpTop = showStaff ? Math.max(staveY + 78, lowY + 18) + num("jpGap", 0, -20, 80) : 8; // 簡譜行頂端：避開五線譜最低處
             const baseY = jpTop + 10 + FS * 1.0 + 4 * k; // 數字基線
       const barTop = baseY - FS * 1.3, barBot = baseY + 10 * k;
       const nVerse = showLyrics ? Math.max(0, ...row.flatMap((m) => m.notes.map((n) => (n.ly || []).length))) : 0;
       const lyTop = baseY + 24 * k + LFS * 0.2;
-      const H2 = baseY + 24 * k + (nVerse ? nVerse * LFS * 1.35 + 8 : 0);
+      const H2 = baseY + 24 * k + (nVerse ? nVerse * LFS * num("lyLine", 1.35, 1, 2.5) + 8 : 0);
       svg.setAttribute("viewBox", `0 0 ${W} ${H2}`);
       // 五線譜上的連結線／圓滑線
       if (showStaff) {
@@ -556,7 +561,7 @@
           notes.forEach((n, i) => {
             (n.ly || []).forEach((l, vi) => {
               if (!l || !l.text) return;
-              const y = lyTop + LFS + vi * LFS * 1.35;
+              const y = lyTop + LFS + vi * LFS * num("lyLine", 1.35, 1, 2.5);
               const label = nVerse > 1 ? "" : "";
               svgEl(g, "text", { x: xs[i], y, "text-anchor": "middle", "font-size": LFS, "font-family": FONT }, l.text + label);
               if (l.hy) {
@@ -730,7 +735,9 @@
     return out;
   }
 
+  const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
   /* @@include compose.js */
+  /* @@include layout.js */
 
   // ---------- UI ----------
   function applyInfoToFields() {
@@ -759,7 +766,7 @@
     try { await openAnyFile(f); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
   });
   $("sample").addEventListener("click", () => loadText(window.SAMPLE_XML, true));
-  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "firstFree", "title", "composer", "singer", "subtitle"].forEach((id) => {
+  ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "firstFree", "sideMargin", "barPad", "rowGap", "jpGap", "lyLine", "title", "composer", "singer", "subtitle"].forEach((id) => {
     $(id).addEventListener("input", (e) => { if (id === "title" || id === "composer") e.target.dataset.touched = "1"; render(); });
     $(id).addEventListener("change", render);
   });
@@ -780,7 +787,6 @@
   const omrBase = () => ($("omrUrl").value.trim() || "http://127.0.0.1:8765").replace(/\/+$/, "");
   let omrJobs = false;
   const omrHeaders = () => { const k = $("omrKey").value.trim(); return k ? { "X-API-Key": k } : {}; };
-  const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
   async function omrPing() {
     const st = $("omrStatus");
     try {
