@@ -440,7 +440,7 @@ input[type=file]{display:none}
     if (kind === "name") modeStr = `音名（${keyStr}）`;
     else if (mode === "fixed") modeStr = kind === "jianpu" ? `絕對音 C=1（原調 ${keyStr}）` : `${kindZh} 固定唱名（原調 ${keyStr}）`;
     else modeStr = `首調 1=${tonicName(info.fifths, info.minor, minorMode)}（${keyStr}）`;
-    const subtitle = $("subtitle").value.trim() || `五線譜・${kindZh}對照　${modeStr}　${info.beats}/${info.beatType} 拍${tempoStr}`;
+    const subtitle = $("subtitle").value.trim() || `${showStaff ? "五線譜・" + kindZh + "對照" : kindZh}　${modeStr}　${info.beats}/${info.beatType} 拍${tempoStr}`;
 
     const h = document.createElement("div");
     h.className = "head";
@@ -477,7 +477,7 @@ input[type=file]{display:none}
       svg.style.width = "100%"; svg.style.height = "auto";
 
       const left = num("sideMargin", 14, 0, 60), usable = W - 2 * left;
-      const firstExtra = 60;
+      const firstExtra = showStaff ? 60 : 0; // 只留簡譜時不需要為譜號留空間
       const unit = (usable - firstExtra) / row.length;
       const staveY = 38;
       const FS = Math.max(10, Math.min(36, parseFloat($("fontSize").value) || 17));
@@ -499,6 +499,12 @@ input[type=file]{display:none}
       let wArr = row.map((m, mi) => Math.max(unit + (mi === 0 ? firstExtra : 0), need[mi]));
       const tot = wArr.reduce((a, b2) => a + b2, 0);
       wArr = wArr.map((v) => (v * (usable)) / tot);
+      if (!showStaff) {
+        // 只留簡譜：所有小節等寬、各行小節線上下對齊（最後一行不足時沿用整行的格寬）
+        const cell = usable / perRow;
+        if (need.every((nd) => nd <= cell)) wArr = row.map(() => cell);
+        else { const mx = Math.max(...need); wArr = row.map(() => Math.max(cell * 0.999, Math.min(mx, usable / row.length))); const t2 = wArr.reduce((a, b2) => a + b2, 0); wArr = wArr.map((v) => (v * usable) / t2); }
+      }
       let x = left;
       let lowY = staveY + 40;
       const bars = [];
@@ -510,12 +516,12 @@ input[type=file]{display:none}
         const stave = new VF.Stave(x, staveY, w);
         const barPad = num("barPad", 0, 0, 40);
         if (barPad) stave.setNoteStartX(stave.getNoteStartX() + barPad);
-        if (mi === 0) {
+        if (mi === 0 && showStaff) {
           stave.addClef(info.clef);
           stave.addKeySignature(minorKey);
           if (r === 0) { stave.addTimeSignature(`${info.beats}/${info.beatType}`); }
           if (r === 0 && info.tempo) stave.setTempo({ duration: "q", bpm: info.tempo }, -22);
-        } else if (gi > 0 && m.fifths !== measures[gi - 1].fifths) {
+        } else if (showStaff && gi > 0 && m.fifths !== measures[gi - 1].fifths) {
           stave.addKeySignature(MAJOR_BY_FIFTHS[m.fifths]);
         }
         if (gi === measures.length - 1) stave.setEndBarType(VF.Barline.type.END);
