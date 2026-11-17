@@ -713,6 +713,8 @@
     return out;
   }
 
+  /* @@include compose.js */
+
   // ---------- UI ----------
   function applyInfoToFields() {
     const { info } = parsed;
@@ -737,7 +739,7 @@
   $("file").addEventListener("change", async (ev) => {
     const f = ev.target.files[0];
     if (!f) return;
-    try { await loadText(await readFileText(f), false); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
+    try { await openAnyFile(f); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
   });
   $("sample").addEventListener("click", () => loadText(window.SAMPLE_XML, true));
   ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "title", "composer", "singer", "subtitle"].forEach((id) => {
@@ -748,6 +750,10 @@
   $("play").addEventListener("click", () => (playing ? stopPlay() : startPlay()));
   $("speed").addEventListener("input", () => { $("speedv").textContent = $("speed").value + "%"; });
   $("dlMidi").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + ".mid", buildMidi(), "audio/midi"); });
+  $("dlXmlPlain").addEventListener("click", () => {
+    if (!parsed) return;
+    downloadBlob(fileBase() + ".musicxml", '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(parsed.doc.documentElement), "application/vnd.recordare.musicxml+xml");
+  });
   $("dlXml").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + "_標註.musicxml", annotatedXml(), "application/vnd.recordare.musicxml+xml"); });
 
   // ---------- 圖檔辨識（連到後端 backend/server.py） ----------
@@ -857,7 +863,7 @@
       else $("err").textContent = "目前尚未開放圖檔辨識，請拖入 MusicXML（.musicxml／.xml／.mxl）檔。";
       return;
     }
-    if (f) { try { await loadText(await readFileText(f), false); } catch (er) { $("err").textContent = "讀取失敗：" + er.message; } }
+    if (f) { try { await openAnyFile(f); } catch (er) { $("err").textContent = "讀取失敗：" + er.message; } }
   });
 
   if (window.SAMPLE_XML) loadText(window.SAMPLE_XML, true); else $("sample").style.display = "none";

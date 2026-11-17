@@ -20,6 +20,18 @@ input[type=file]{display:none}
 .lyr{width:100%;font-size:13px;color:#445}.lyr textarea{width:100%;font:inherit;font-size:14px;padding:6px 8px;border:1px solid #c5ccd5;border-radius:6px}
 .orig{margin-bottom:10px}.orig img{max-width:100%;border:1px solid #d5dbe2}
 @media print{.orig{display:none}}
+.tools{max-width:210mm;margin:12px auto 0;padding:0 8px}
+.panel{background:#fff;border:1px solid #d5dbe2;border-radius:8px;padding:12px 14px;margin-bottom:10px;font-size:14px}
+.panel h3{margin:0 0 8px;font-size:16px}
+.panel summary{cursor:pointer;font-weight:700}
+.panel .grid{display:flex;flex-wrap:wrap;gap:10px 14px;margin:8px 0}
+.panel textarea{width:100%;font:inherit;font-size:16px;padding:8px;border:1px solid #c5ccd5;border-radius:6px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.panel code{background:#eef1f4;padding:0 4px;border-radius:3px}
+.trks label.trk{display:block;font-size:14px;color:#1b2430;padding:2px 0}
+.inl input{width:54px}
+.chk2{flex-direction:row;align-items:center;gap:6px;font-size:14px;color:#1b2430;padding-bottom:6px}
+.err{color:#b42318;font-size:13px;margin-left:8px}
+@media print{.tools{display:none}}
 .hint{font-size:12px;color:#667;width:100%}
 .page{width:210mm;max-width:100%;margin:18px auto;background:#fff;padding:14mm 12mm;box-shadow:0 2px 12px rgba(0,0,0,.12)}
 .head{text-align:center;margin-bottom:6px}
@@ -33,7 +45,7 @@ input[type=file]{display:none}
 </style></head><body>
 <div class="bar">
 <h2>簡譜標註器</h2>
-<label class="btn" style="display:inline-block;margin-bottom:0">選擇 MusicXML 檔<input id="file" type="file" accept=".musicxml,.xml,.mxl"></label>
+<label class="btn" style="display:inline-block;margin-bottom:0">選擇 MusicXML／MIDI 檔<input id="file" type="file" accept=".musicxml,.xml,.mxl,.mid,.midi"></label>
 <label class="btn alt omr-only" id="omrBtn" style="display:inline-block;margin-bottom:0">從圖檔辨識（PNG／JPG／PDF）<input id="omrFile" type="file" accept="image/*,.pdf"></label>
 <button id="sample" class="alt" type="button">載入範例（小星星）</button>
 <label>標註<select id="kind"><option value="jianpu">簡譜 1 2 3</option><option value="solfege">唱名 Do Re Mi</option><option value="name">音名 C D E</option></select></label>
@@ -54,6 +66,7 @@ input[type=file]{display:none}
 <button id="play" type="button">▶ 播放</button>
 <label>速度 <span id="speedv">100%</span><input id="speed" type="range" min="50" max="150" step="5" value="100" style="width:110px"></label>
 <button id="dlMidi" class="alt" type="button">下載 MIDI</button>
+<button id="dlXmlPlain" class="alt" type="button">下載 MusicXML</button>
 <button id="dlXml" class="alt" type="button">下載標註 MusicXML</button>
 <span id="meta"></span>
 <details class="lyr omr-only"><summary>圖檔辨識設定</summary>
@@ -69,6 +82,42 @@ input[type=file]{display:none}
 </details>
 <div id="err"></div>
 <div class="hint">可直接把 .musicxml / .xml / .mxl 拖進視窗。所有處理都在你的瀏覽器內完成，檔案不會上傳。列印時請選 A4。目前只取第一聲部；和弦取最高音；連結線（tie）以兩個數字呈現。簡譜字級放大後若太擠，請把「每行小節數」調少。</div>
+</div>
+<div class="tools">
+<div id="midiPanel" class="panel" hidden>
+<h3>匯入 MIDI → 轉成 MusicXML</h3>
+<div id="midiTracks" class="trks"></div>
+<div class="grid">
+<label>取音<select id="midiVoice"><option value="top">同時多音取最高音（旋律）</option><option value="bottom">同時多音取最低音</option></select></label>
+<label>量化<select id="midiGrid"><option value="4">十六分音符</option><option value="2">八分音符</option></select></label>
+<label>調號<select id="midiKey"><option value="auto">自動判斷</option></select></label>
+<label>拍號<span class="inl"><input id="midiBeats" type="number" min="1" max="16" value="4"> / <input id="midiBeatType" type="number" min="1" max="16" value="4"></span></label>
+<label>速度（每分鐘幾拍）<input id="midiTempo" type="number" min="20" max="300" value="90"></label>
+<label>標題<input id="midiTitle" type="text"></label>
+</div>
+<div class="hint" style="margin:6px 0">MIDI 只有音高與時間，沒有記譜資訊，轉出來是「單聲部旋律」。節奏會被量化，演奏型 MIDI（有搖擺或自由速度）請選八分音符量化並事後檢查。</div>
+<button id="midiGo" type="button">轉換並載入</button> <button id="midiCancel" class="alt" type="button">取消</button>
+<span id="midiErr" class="err"></span>
+</div>
+<details id="edPanel" class="panel"><summary>線上編寫（簡譜文字輸入）</summary>
+<div class="grid">
+<label>標題<input id="edTitle" type="text"></label>
+<label>調號<select id="edKey"></select></label>
+<label class="chk2"><input id="edMinor" type="checkbox"> 小調</label>
+<label>拍號<span class="inl"><input id="edBeats" type="number" min="1" max="16" value="4"> / <input id="edBeatType" type="number" min="1" max="16" value="4"></span></label>
+<label>速度<input id="edTempo" type="number" min="20" max="300" value="90"></label>
+<label>譜號<select id="edClef"><option value="treble">高音</option><option value="bass">低音</option></select></label>
+<label>音高對應<select id="edMode"><option value="movable">首調（1＝調號主音）</option><option value="fixed">絕對音（1＝C）</option></select></label>
+</div>
+<textarea id="edText" rows="4" placeholder="例：1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -"></textarea>
+<div class="hint" style="margin:6px 0;line-height:1.7">
+<b>寫法</b>：數字 1–7 是音高、0 是休止；<code>#</code>／<code>b</code> 放數字前面表示升降（<code>#4</code>）；<code>'</code> 高八度、<code>,</code> 低八度（<code>1'</code>、<code>5,</code>），可重複；
+<code>-</code> 延長一拍（<code>5 - - -</code> 是全音符）；<code>_</code> 縮短一半（<code>1_ 2_</code> 是兩個八分、<code>1__</code> 十六分）；<code>.</code> 附點（<code>5.</code>）；<code>~</code> 連結線（<code>5 ~ 5</code>）；<code>|</code> 小節線只是方便閱讀，小節是依拍號自動切的。
+首調時小調以 6 為主音（調號選它的關係大調）。輸入後約半秒自動更新下方樂譜，可以直接「下載 MusicXML」。
+</div>
+<button id="edExample" class="alt" type="button">放入範例</button> <button id="edClear" class="alt" type="button">清除</button>
+<span id="edErr" class="err"></span>
+</details>
 </div>
 <div class="page"><div id="origBox" class="orig"></div><div id="sheet"></div></div>
 <script>/*!
@@ -794,6 +843,320 @@ input[type=file]{display:none}
     return out;
   }
 
+    // =====================================================================
+  //  匯入 MIDI → MusicXML、線上編寫（簡譜文字輸入）→ MusicXML
+  //  共用流程：事件序列 → layoutEvents（切小節、拆音值、加連結線）→ buildMusicXml → loadText
+  // =====================================================================
+  const UNIT_PER_QUARTER = 4; // 內部以十六分音符為單位
+  const PIECES = [16, 12, 8, 6, 4, 3, 2, 1]; // 可記譜的音值（單位：十六分）：全、附點二分、二分、附點四分、四分、附點八分、八分、十六分
+  const TYPE_OF = { 16: ["whole", 0], 12: ["half", 1], 8: ["half", 0], 6: ["quarter", 1], 4: ["quarter", 0], 3: ["eighth", 1], 2: ["eighth", 0], 1: ["16th", 0] };
+  const xmlEsc = (s) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]));
+
+  // events: [{ rest:true, units } | { pitch:{step,alter,octave}, units, tieNext }]
+  function layoutEvents(events, measUnits) {
+    const measures = [[]];
+    let pos = 0, prevTie = false;
+    const cur = () => measures[measures.length - 1];
+    events.forEach((ev) => {
+      let left = ev.units, first = true;
+      while (left > 0) {
+        if (pos >= measUnits) { measures.push([]); pos = 0; }
+        const take = Math.min(left, measUnits - pos);
+        let rem = take;
+        const pieces = [];
+        while (rem > 0) { const p = PIECES.find((x) => x <= rem); pieces.push(p); rem -= p; }
+        pieces.forEach((p, i) => {
+          const lastPiece = left - take === 0 && i === pieces.length - 1;
+          const n = { rest: !!ev.rest, pitch: ev.pitch || null, units: p };
+          if (!ev.rest) {
+            n.tieStop = !(first && i === 0) || (first && i === 0 && prevTie);
+            n.tieStart = !lastPiece || (lastPiece && !!ev.tieNext);
+          }
+          cur().push(n);
+        });
+        pos += take; left -= take; first = false;
+      }
+      prevTie = !!ev.tieNext && !ev.rest;
+    });
+    if (pos < measUnits && cur().length) {
+      let rem = measUnits - pos;
+      while (rem > 0) { const p = PIECES.find((x) => x <= rem); cur().push({ rest: true, pitch: null, units: p }); rem -= p; }
+    }
+    return measures.filter((m) => m.length);
+  }
+
+  function buildMusicXml(spec) {
+    const measUnits = Math.round((spec.beats * 4 * UNIT_PER_QUARTER) / spec.beatType);
+    const measures = layoutEvents(spec.events, measUnits);
+    if (!measures.length) throw new Error("沒有任何音符");
+    const clef = spec.clef === "bass" ? "<sign>F</sign><line>4</line>" : "<sign>G</sign><line>2</line>";
+    let x = `<?xml version="1.0" encoding="UTF-8"?>\n<score-partwise version="3.1">\n<work><work-title>${xmlEsc(spec.title || "")}</work-title></work>\n`;
+    if (spec.composer) x += `<identification><creator type="composer">${xmlEsc(spec.composer)}</creator></identification>\n`;
+    x += `<part-list><score-part id="P1"><part-name>Music</part-name></score-part></part-list>\n<part id="P1">\n`;
+    measures.forEach((m, mi) => {
+      x += `<measure number="${mi + 1}">\n`;
+      if (mi === 0) {
+        x += `<attributes><divisions>${UNIT_PER_QUARTER}</divisions><key><fifths>${spec.fifths}</fifths><mode>${spec.minor ? "minor" : "major"}</mode></key><time><beats>${spec.beats}</beats><beat-type>${spec.beatType}</beat-type></time><clef>${clef}</clef></attributes>\n`;
+        if (spec.tempo) x += `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${spec.tempo}</per-minute></metronome></direction-type><sound tempo="${spec.tempo}"/></direction>\n`;
+      }
+      m.forEach((n) => {
+        const [type, dots] = TYPE_OF[n.units];
+        x += "<note>";
+        if (n.rest) x += "<rest/>";
+        else x += `<pitch><step>${n.pitch.step}</step>${n.pitch.alter ? `<alter>${n.pitch.alter}</alter>` : ""}<octave>${n.pitch.octave}</octave></pitch>`;
+        x += `<duration>${n.units}</duration>`;
+        if (n.tieStop) x += '<tie type="stop"/>';
+        if (n.tieStart) x += '<tie type="start"/>';
+        x += `<voice>1</voice><type>${type}</type>${dots ? "<dot/>" : ""}`;
+        if (n.tieStop || n.tieStart) x += `<notations>${n.tieStop ? '<tied type="stop"/>' : ""}${n.tieStart ? '<tied type="start"/>' : ""}</notations>`;
+        x += "</note>\n";
+      });
+      x += "</measure>\n";
+    });
+    return x + "</part>\n</score-partwise>\n";
+  }
+
+  async function loadGenerated(xml, title) {
+    await loadText(xml, false);
+    if (title) { $("title").value = title; $("title").dataset.touched = "1"; render(); }
+  }
+
+  // ---------- MIDI 解析 ----------
+  function parseMidi(u8) {
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const str = (o, n) => String.fromCharCode(...u8.subarray(o, o + n));
+    if (str(0, 4) !== "MThd") throw new Error("不是 MIDI 檔");
+    const ntrks = dv.getUint16(10), div = dv.getUint16(12);
+    if (div & 0x8000) throw new Error("不支援 SMPTE 時間格式的 MIDI");
+    let pos = 14;
+    const out = { div, tracks: [], tempo: null, ts: null, key: null };
+    const vlq = () => { let v = 0, b; do { b = u8[pos++]; v = (v << 7) | (b & 0x7f); } while (b & 0x80); return v; };
+    for (let t = 0; t < ntrks && pos + 8 <= u8.length; t++) {
+      if (str(pos, 4) !== "MTrk") break;
+      const len = dv.getUint32(pos + 4);
+      pos += 8;
+      const end = Math.min(u8.length, pos + len);
+      let tick = 0, running = 0, name = "";
+      const open = {}, notes = [], chans = new Set();
+      while (pos < end) {
+        tick += vlq();
+        let st = u8[pos];
+        if (st < 0x80) st = running; else { pos++; if (st < 0xf0) running = st; }
+        if (st === 0xff) {
+          const type = u8[pos++], ml = vlq(), d = u8.subarray(pos, pos + ml);
+          pos += ml;
+          if (type === 0x03 && !name) name = new TextDecoder("utf-8").decode(d);
+          else if (type === 0x51 && out.tempo == null && ml === 3) out.tempo = Math.round(60000000 / ((d[0] << 16) | (d[1] << 8) | d[2]));
+          else if (type === 0x58 && !out.ts && ml >= 2) out.ts = [d[0], 1 << d[1]];
+          else if (type === 0x59 && !out.key && ml >= 2) out.key = { sf: (d[0] << 24) >> 24, minor: d[1] === 1 };
+          else if (type === 0x2f) { pos = end; }
+        } else if (st === 0xf0 || st === 0xf7) {
+          pos += vlq();
+        } else {
+          const kind = st & 0xf0, ch = st & 0x0f;
+          const d1 = u8[pos++];
+          const d2 = kind === 0xc0 || kind === 0xd0 ? 0 : u8[pos++];
+          if (kind === 0x90 && d2 > 0) { (open[ch * 128 + d1] = open[ch * 128 + d1] || []).push(tick); chans.add(ch); }
+          else if (kind === 0x80 || (kind === 0x90 && d2 === 0)) {
+            const q = open[ch * 128 + d1];
+            if (q && q.length) notes.push({ start: q.shift(), end: tick, pitch: d1, ch });
+          }
+        }
+      }
+      pos = end;
+      out.tracks.push({ name, notes, chans: [...chans] });
+    }
+    return out;
+  }
+
+  // 調性估計（Krumhansl–Schmuckler）
+  function estimateKey(pcs) {
+    const MAJ = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+    const MIN = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+    const corr = (a, b) => {
+      const ma = a.reduce((s, v) => s + v, 0) / 12, mb = b.reduce((s, v) => s + v, 0) / 12;
+      let n = 0, da = 0, db = 0;
+      for (let i = 0; i < 12; i++) { n += (a[i] - ma) * (b[i] - mb); da += (a[i] - ma) ** 2; db += (b[i] - mb) ** 2; }
+      return da && db ? n / Math.sqrt(da * db) : -1;
+    };
+    const FIFTHS_OF_MAJOR_PC = [0, -5, 2, -3, 4, -1, 6, 1, -4, 3, -2, 5];
+    let best = { r: -2, sf: 0, minor: false };
+    for (let tonic = 0; tonic < 12; tonic++) {
+      const rot = (prof) => Array.from({ length: 12 }, (_, i) => prof[(i - tonic + 12) % 12]);
+      const rM = corr(pcs, rot(MAJ)), rm = corr(pcs, rot(MIN));
+      if (rM > best.r) best = { r: rM, sf: FIFTHS_OF_MAJOR_PC[tonic], minor: false };
+      if (rm > best.r) best = { r: rm, sf: FIFTHS_OF_MAJOR_PC[(tonic + 3) % 12], minor: true };
+    }
+    return best;
+  }
+  const SPELL_SHARP = [["C", 0], ["C", 1], ["D", 0], ["D", 1], ["E", 0], ["F", 0], ["F", 1], ["G", 0], ["G", 1], ["A", 0], ["A", 1], ["B", 0]];
+  const SPELL_FLAT = [["C", 0], ["D", -1], ["D", 0], ["E", -1], ["E", 0], ["F", 0], ["G", -1], ["G", 0], ["A", -1], ["A", 0], ["B", -1], ["B", 0]];
+  function spellMidi(midi, fifths) {
+    const [step, alter] = (fifths >= 0 ? SPELL_SHARP : SPELL_FLAT)[midi % 12];
+    return { step, alter, octave: Math.floor(midi / 12) - 1 };
+  }
+
+  let midiData = null, midiName = "";
+  function openMidi(u8, name) {
+    midiData = parseMidi(u8);
+    midiName = name.replace(/\.[^.]+$/, "");
+    const cand = midiData.tracks.map((t, i) => ({ t, i })).filter((x) => x.t.notes.length && !x.t.chans.every((c) => c === 9));
+    if (!cand.length) throw new Error("這個 MIDI 檔裡沒有可轉換的音符");
+    const avg = (t) => t.notes.reduce((s, n) => s + n.pitch, 0) / t.notes.length;
+    cand.sort((a, b) => b.t.notes.length - a.t.notes.length || avg(b.t) - avg(a.t));
+    const box = $("midiTracks");
+    box.innerHTML = "";
+    midiData.tracks.forEach((t, i) => {
+      if (!t.notes.length) return;
+      const drums = t.chans.every((c) => c === 9);
+      const lo = Math.min(...t.notes.map((n) => n.pitch)), hi = Math.max(...t.notes.map((n) => n.pitch));
+      const lab = document.createElement("label");
+      lab.className = "trk";
+      const rd = document.createElement("input");
+      rd.type = "radio"; rd.name = "midiTrack"; rd.value = i; rd.disabled = drums;
+      if (i === cand[0].i) rd.checked = true;
+      lab.appendChild(rd);
+      lab.appendChild(document.createTextNode(` 音軌 ${i + 1}${t.name ? "「" + t.name + "」" : ""}：${t.notes.length} 個音，音域 ${midiNoteName(lo)}–${midiNoteName(hi)}${drums ? "（打擊樂，無法轉換）" : ""}`));
+      box.appendChild(lab);
+    });
+    $("midiBeats").value = midiData.ts ? midiData.ts[0] : 4;
+    $("midiBeatType").value = midiData.ts ? midiData.ts[1] : 4;
+    $("midiTempo").value = midiData.tempo || 90;
+    $("midiKey").value = midiData.key ? String(midiData.key.sf) + (midiData.key.minor ? "m" : "M") : "auto";
+    $("midiTitle").value = midiName;
+    $("midiPanel").hidden = false;
+    $("midiPanel").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  const midiNoteName = (m) => ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"][m % 12] + (Math.floor(m / 12) - 1);
+
+  function convertMidi() {
+    try {
+      $("midiErr").textContent = "";
+      const sel = document.querySelector('input[name="midiTrack"]:checked');
+      if (!sel) throw new Error("請選一個音軌");
+      const trk = midiData.tracks[parseInt(sel.value)];
+      const grid = parseInt($("midiGrid").value); // 每四分音符幾格（4＝十六分、2＝八分）
+      const mul = UNIT_PER_QUARTER / grid;
+      const top = $("midiVoice").value === "top";
+      const beats = parseInt($("midiBeats").value) || 4, beatType = parseInt($("midiBeatType").value) || 4;
+      // 量化並保留單聲部
+      const q = trk.notes.map((n) => ({ s: Math.round((n.start * grid) / midiData.div), e: Math.round((n.end * grid) / midiData.div), p: n.pitch }));
+      q.sort((a, b) => a.s - b.s || (top ? b.p - a.p : a.p - b.p));
+      const mono = [];
+      q.forEach((n) => { if (!mono.length || mono[mono.length - 1].s !== n.s) mono.push({ ...n }); });
+      for (let i = 0; i < mono.length; i++) { if (i + 1 < mono.length) mono[i].e = Math.min(mono[i].e, mono[i + 1].s); }
+      const notes = mono.filter((n) => n.e > n.s);
+      if (!notes.length) throw new Error("量化後沒有音符，試試較細的量化格");
+      // 調號
+      let fifths, minor = false;
+      const kv = $("midiKey").value;
+      if (kv === "auto") {
+        const pcs = new Array(12).fill(0);
+        notes.forEach((n) => (pcs[n.p % 12] += n.e - n.s));
+        const k = estimateKey(pcs);
+        fifths = k.sf; minor = k.minor;
+      } else { fifths = parseInt(kv); minor = kv.endsWith("m"); }
+      const events = [];
+      let cur = 0;
+      notes.forEach((n) => {
+        if (n.s > cur) events.push({ rest: true, units: (n.s - cur) * mul });
+        events.push({ pitch: spellMidi(n.p, fifths), units: (n.e - n.s) * mul });
+        cur = n.e;
+      });
+      const clef = notes.reduce((s, n) => s + n.p, 0) / notes.length < 55 ? "bass" : "treble";
+      const xml = buildMusicXml({ title: $("midiTitle").value.trim(), fifths, minor, beats, beatType, tempo: parseInt($("midiTempo").value) || null, clef, events });
+      loadGenerated(xml, $("midiTitle").value.trim());
+      $("midiPanel").hidden = true;
+    } catch (e) {
+      $("midiErr").textContent = "轉換失敗：" + e.message;
+    }
+  }
+
+  // ---------- 線上編寫：簡譜文字輸入 ----------
+  const JP_TOKEN = /^([#♯]|[b♭])?([0-7])([',’]*)(_*)(\.?)(-*)$/;
+  function pitchFromJianpu(d, acc, oct, fifths, mode) {
+    const [tstep, talter] = mode === "fixed" ? ["C", 0] : TONIC_MAJOR_STEP[String(fifths)];
+    const MAJ = [0, 2, 4, 5, 7, 9, 11];
+    const tAbs = STEP_IDX[tstep] + 28;
+    const nAbs = tAbs + (d - 1) + 7 * oct;
+    const letter = STEPS[((nAbs % 7) + 7) % 7];
+    const octave = Math.floor(nAbs / 7);
+    const target = 12 * 5 + STEP_SEMI[STEP_IDX[tstep]] + talter + MAJ[d - 1] + acc + 12 * oct;
+    return { step: letter, alter: target - (12 * (octave + 1) + STEP_SEMI[STEP_IDX[letter]]), octave };
+  }
+  function parseJianpuText(text, fifths, mode) {
+    const events = [], errors = [];
+    const toks = text.replace(/[|｜]/g, " ").replace(/~/g, " ~ ").split(/\s+/).filter(Boolean);
+    toks.forEach((tok, idx) => {
+      if (tok === "~") { if (events.length) events[events.length - 1].tieNext = true; return; }
+      if (/^-+$/.test(tok)) { if (events.length) events[events.length - 1].units += 4 * tok.length; else errors.push(`第 ${idx + 1} 個符號「${tok}」前面沒有音符`); return; }
+      const m = tok.match(JP_TOKEN);
+      if (!m) { errors.push(`看不懂「${tok}」（第 ${idx + 1} 個符號）`); return; }
+      const [, accS, dS, octS, us, dot, dashes] = m;
+      const d = parseInt(dS), under = us.length;
+      if (under > 2) { errors.push(`「${tok}」底線最多兩條`); return; }
+      if (under && dashes) { errors.push(`「${tok}」不能同時有底線和延長線`); return; }
+      let units = (4 * (1 + dashes.length)) / Math.pow(2, under);
+      if (dot) units *= 1.5;
+      if (units !== Math.floor(units)) { errors.push(`「${tok}」音值太短，無法記譜`); return; }
+      const oct = [...octS].reduce((s, c) => s + (c === "," ? -1 : 1), 0);
+      if (d === 0) { events.push({ rest: true, units }); return; }
+      const acc = accS ? (accS === "#" || accS === "♯" ? 1 : -1) : 0;
+      events.push({ pitch: pitchFromJianpu(d, acc, oct, fifths, mode), units });
+    });
+    return { events, errors };
+  }
+  function applyEditor() {
+    const txt = $("edText").value;
+    const err = $("edErr");
+    err.textContent = "";
+    if (!txt.trim()) return;
+    try {
+      const kv = $("edKey").value;
+      const fifths = parseInt(kv), minor = $("edMinor").checked;
+      const { events, errors } = parseJianpuText(txt, fifths, $("edMode").value);
+      if (errors.length) err.textContent = errors.slice(0, 4).join("；") + (errors.length > 4 ? `…（共 ${errors.length} 處）` : "");
+      if (!events.length) return;
+      const xml = buildMusicXml({
+        title: $("edTitle").value.trim(), fifths, minor,
+        beats: parseInt($("edBeats").value) || 4, beatType: parseInt($("edBeatType").value) || 4,
+        tempo: parseInt($("edTempo").value) || null, clef: $("edClef").value, events,
+      });
+      loadGenerated(xml, $("edTitle").value.trim());
+    } catch (e) { err.textContent = "轉換失敗：" + e.message; }
+  }
+  let edTimer = 0;
+  const edSchedule = () => { clearTimeout(edTimer); edTimer = setTimeout(applyEditor, 350); };
+  ["edText", "edTitle", "edKey", "edMinor", "edBeats", "edBeatType", "edTempo", "edClef", "edMode"].forEach((id) => {
+    $(id).addEventListener("input", edSchedule);
+    $(id).addEventListener("change", edSchedule);
+  });
+  $("edClear").addEventListener("click", () => { $("edText").value = ""; $("edErr").textContent = ""; });
+  $("edExample").addEventListener("click", () => { $("edText").value = "1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -"; $("edKey").value = "0"; $("edMode").value = "movable"; $("edTitle").value = "輸入範例"; applyEditor(); });
+  $("midiGo").addEventListener("click", convertMidi);
+  $("midiCancel").addEventListener("click", () => { $("midiPanel").hidden = true; });
+  (function fillKeys() {
+    const names = { "-7": "C♭", "-6": "G♭", "-5": "D♭", "-4": "A♭", "-3": "E♭", "-2": "B♭", "-1": "F", 0: "C", 1: "G", 2: "D", 3: "A", 4: "E", 5: "B", 6: "F♯", 7: "C♯" };
+    const sel = [$("edKey")];
+    sel.forEach((s) => { for (let f = -7; f <= 7; f++) { const o = document.createElement("option"); o.value = f; o.textContent = `${names[f]} 大調（${f === 0 ? "無升降" : f > 0 ? "♯" + f : "♭" + -f}）`; s.appendChild(o); } s.value = "0"; });
+    const mk = $("midiKey");
+    for (let f = -7; f <= 7; f++) {
+      const o = document.createElement("option"); o.value = f + "M"; o.textContent = `${names[f]} 大調`; mk.appendChild(o);
+    }
+    const mn = { "-7": "A♭", "-6": "E♭", "-5": "B♭", "-4": "F", "-3": "C", "-2": "G", "-1": "D", 0: "A", 1: "E", 2: "B", 3: "F♯", 4: "C♯", 5: "G♯", 6: "D♯", 7: "A♯" };
+    for (let f = -7; f <= 7; f++) { const o = document.createElement("option"); o.value = f + "m"; o.textContent = `${mn[f]} 小調`; mk.appendChild(o); }
+  })();
+
+  // 開啟任何檔案：MIDI／MusicXML／mxl
+  async function openAnyFile(f) {
+    const u8 = new Uint8Array(await f.arrayBuffer());
+    if (u8[0] === 0x4d && u8[1] === 0x54 && u8[2] === 0x68 && u8[3] === 0x64) { openMidi(u8, f.name); return; }
+    $("midiPanel").hidden = true;
+    const text = u8[0] === 0x50 && u8[1] === 0x4b ? await unzipMxl(u8) : new TextDecoder("utf-8").decode(u8);
+    await loadText(text, false);
+  }
+
+
   // ---------- UI ----------
   function applyInfoToFields() {
     const { info } = parsed;
@@ -818,7 +1181,7 @@ input[type=file]{display:none}
   $("file").addEventListener("change", async (ev) => {
     const f = ev.target.files[0];
     if (!f) return;
-    try { await loadText(await readFileText(f), false); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
+    try { await openAnyFile(f); } catch (e) { $("err").textContent = "讀取失敗：" + e.message; }
   });
   $("sample").addEventListener("click", () => loadText(window.SAMPLE_XML, true));
   ["kind", "mode", "minorMode", "perRow", "fontSize", "showLyrics", "showTies", "showSlurs", "lyricSize", "lyricText", "showStaff", "title", "composer", "singer", "subtitle"].forEach((id) => {
@@ -829,6 +1192,10 @@ input[type=file]{display:none}
   $("play").addEventListener("click", () => (playing ? stopPlay() : startPlay()));
   $("speed").addEventListener("input", () => { $("speedv").textContent = $("speed").value + "%"; });
   $("dlMidi").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + ".mid", buildMidi(), "audio/midi"); });
+  $("dlXmlPlain").addEventListener("click", () => {
+    if (!parsed) return;
+    downloadBlob(fileBase() + ".musicxml", '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(parsed.doc.documentElement), "application/vnd.recordare.musicxml+xml");
+  });
   $("dlXml").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + "_標註.musicxml", annotatedXml(), "application/vnd.recordare.musicxml+xml"); });
 
   // ---------- 圖檔辨識（連到後端 backend/server.py） ----------
@@ -938,7 +1305,7 @@ input[type=file]{display:none}
       else $("err").textContent = "目前尚未開放圖檔辨識，請拖入 MusicXML（.musicxml／.xml／.mxl）檔。";
       return;
     }
-    if (f) { try { await loadText(await readFileText(f), false); } catch (er) { $("err").textContent = "讀取失敗：" + er.message; } }
+    if (f) { try { await openAnyFile(f); } catch (er) { $("err").textContent = "讀取失敗：" + er.message; } }
   });
 
   if (window.SAMPLE_XML) loadText(window.SAMPLE_XML, true); else $("sample").style.display = "none";

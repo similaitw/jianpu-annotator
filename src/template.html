@@ -20,6 +20,18 @@ input[type=file]{display:none}
 .lyr{width:100%;font-size:13px;color:#445}.lyr textarea{width:100%;font:inherit;font-size:14px;padding:6px 8px;border:1px solid #c5ccd5;border-radius:6px}
 .orig{margin-bottom:10px}.orig img{max-width:100%;border:1px solid #d5dbe2}
 @media print{.orig{display:none}}
+.tools{max-width:210mm;margin:12px auto 0;padding:0 8px}
+.panel{background:#fff;border:1px solid #d5dbe2;border-radius:8px;padding:12px 14px;margin-bottom:10px;font-size:14px}
+.panel h3{margin:0 0 8px;font-size:16px}
+.panel summary{cursor:pointer;font-weight:700}
+.panel .grid{display:flex;flex-wrap:wrap;gap:10px 14px;margin:8px 0}
+.panel textarea{width:100%;font:inherit;font-size:16px;padding:8px;border:1px solid #c5ccd5;border-radius:6px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.panel code{background:#eef1f4;padding:0 4px;border-radius:3px}
+.trks label.trk{display:block;font-size:14px;color:#1b2430;padding:2px 0}
+.inl input{width:54px}
+.chk2{flex-direction:row;align-items:center;gap:6px;font-size:14px;color:#1b2430;padding-bottom:6px}
+.err{color:#b42318;font-size:13px;margin-left:8px}
+@media print{.tools{display:none}}
 .hint{font-size:12px;color:#667;width:100%}
 .page{width:210mm;max-width:100%;margin:18px auto;background:#fff;padding:14mm 12mm;box-shadow:0 2px 12px rgba(0,0,0,.12)}
 .head{text-align:center;margin-bottom:6px}
@@ -33,7 +45,7 @@ input[type=file]{display:none}
 </style></head><body>
 <div class="bar">
 <h2>簡譜標註器</h2>
-<label class="btn" style="display:inline-block;margin-bottom:0">選擇 MusicXML 檔<input id="file" type="file" accept=".musicxml,.xml,.mxl"></label>
+<label class="btn" style="display:inline-block;margin-bottom:0">選擇 MusicXML／MIDI 檔<input id="file" type="file" accept=".musicxml,.xml,.mxl,.mid,.midi"></label>
 <label class="btn alt omr-only" id="omrBtn" style="display:inline-block;margin-bottom:0">從圖檔辨識（PNG／JPG／PDF）<input id="omrFile" type="file" accept="image/*,.pdf"></label>
 <button id="sample" class="alt" type="button">載入範例（小星星）</button>
 <label>標註<select id="kind"><option value="jianpu">簡譜 1 2 3</option><option value="solfege">唱名 Do Re Mi</option><option value="name">音名 C D E</option></select></label>
@@ -54,6 +66,7 @@ input[type=file]{display:none}
 <button id="play" type="button">▶ 播放</button>
 <label>速度 <span id="speedv">100%</span><input id="speed" type="range" min="50" max="150" step="5" value="100" style="width:110px"></label>
 <button id="dlMidi" class="alt" type="button">下載 MIDI</button>
+<button id="dlXmlPlain" class="alt" type="button">下載 MusicXML</button>
 <button id="dlXml" class="alt" type="button">下載標註 MusicXML</button>
 <span id="meta"></span>
 <details class="lyr omr-only"><summary>圖檔辨識設定</summary>
@@ -69,6 +82,42 @@ input[type=file]{display:none}
 </details>
 <div id="err"></div>
 <div class="hint">可直接把 .musicxml / .xml / .mxl 拖進視窗。所有處理都在你的瀏覽器內完成，檔案不會上傳。列印時請選 A4。目前只取第一聲部；和弦取最高音；連結線（tie）以兩個數字呈現。簡譜字級放大後若太擠，請把「每行小節數」調少。</div>
+</div>
+<div class="tools">
+<div id="midiPanel" class="panel" hidden>
+<h3>匯入 MIDI → 轉成 MusicXML</h3>
+<div id="midiTracks" class="trks"></div>
+<div class="grid">
+<label>取音<select id="midiVoice"><option value="top">同時多音取最高音（旋律）</option><option value="bottom">同時多音取最低音</option></select></label>
+<label>量化<select id="midiGrid"><option value="4">十六分音符</option><option value="2">八分音符</option></select></label>
+<label>調號<select id="midiKey"><option value="auto">自動判斷</option></select></label>
+<label>拍號<span class="inl"><input id="midiBeats" type="number" min="1" max="16" value="4"> / <input id="midiBeatType" type="number" min="1" max="16" value="4"></span></label>
+<label>速度（每分鐘幾拍）<input id="midiTempo" type="number" min="20" max="300" value="90"></label>
+<label>標題<input id="midiTitle" type="text"></label>
+</div>
+<div class="hint" style="margin:6px 0">MIDI 只有音高與時間，沒有記譜資訊，轉出來是「單聲部旋律」。節奏會被量化，演奏型 MIDI（有搖擺或自由速度）請選八分音符量化並事後檢查。</div>
+<button id="midiGo" type="button">轉換並載入</button> <button id="midiCancel" class="alt" type="button">取消</button>
+<span id="midiErr" class="err"></span>
+</div>
+<details id="edPanel" class="panel"><summary>線上編寫（簡譜文字輸入）</summary>
+<div class="grid">
+<label>標題<input id="edTitle" type="text"></label>
+<label>調號<select id="edKey"></select></label>
+<label class="chk2"><input id="edMinor" type="checkbox"> 小調</label>
+<label>拍號<span class="inl"><input id="edBeats" type="number" min="1" max="16" value="4"> / <input id="edBeatType" type="number" min="1" max="16" value="4"></span></label>
+<label>速度<input id="edTempo" type="number" min="20" max="300" value="90"></label>
+<label>譜號<select id="edClef"><option value="treble">高音</option><option value="bass">低音</option></select></label>
+<label>音高對應<select id="edMode"><option value="movable">首調（1＝調號主音）</option><option value="fixed">絕對音（1＝C）</option></select></label>
+</div>
+<textarea id="edText" rows="4" placeholder="例：1 1 5 5 | 6 6 5 - | 4 4 3 3 | 2 2 1 -"></textarea>
+<div class="hint" style="margin:6px 0;line-height:1.7">
+<b>寫法</b>：數字 1–7 是音高、0 是休止；<code>#</code>／<code>b</code> 放數字前面表示升降（<code>#4</code>）；<code>'</code> 高八度、<code>,</code> 低八度（<code>1'</code>、<code>5,</code>），可重複；
+<code>-</code> 延長一拍（<code>5 - - -</code> 是全音符）；<code>_</code> 縮短一半（<code>1_ 2_</code> 是兩個八分、<code>1__</code> 十六分）；<code>.</code> 附點（<code>5.</code>）；<code>~</code> 連結線（<code>5 ~ 5</code>）；<code>|</code> 小節線只是方便閱讀，小節是依拍號自動切的。
+首調時小調以 6 為主音（調號選它的關係大調）。輸入後約半秒自動更新下方樂譜，可以直接「下載 MusicXML」。
+</div>
+<button id="edExample" class="alt" type="button">放入範例</button> <button id="edClear" class="alt" type="button">清除</button>
+<span id="edErr" class="err"></span>
+</details>
 </div>
 <div class="page"><div id="origBox" class="orig"></div><div id="sheet"></div></div>
 <script>%%VEXFLOW%%</script>
