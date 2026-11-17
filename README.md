@@ -18,6 +18,7 @@
 - 單檔、內嵌 VexFlow，不需連網
 
 ## 圖檔辨識（本機後端）
+> **目前網頁上已隱藏**（`src/app.js` 的 `OMR_ENABLED = false`），先只開放 MusicXML 轉換。要啟用：改成 `true`，執行 `python3 build.py`，並照下面步驟啟動後端。
 網頁本身不上傳任何東西；要辨識圖檔時，網頁把圖傳到**你自己電腦上**的小服務，由它用 [homr](https://github.com/liebharc/homr)（開源 OMR）辨識成 MusicXML。
 
 **方法 A：Docker（建議，不用裝 Python）**

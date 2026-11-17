@@ -750,7 +750,10 @@
   $("dlMidi").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + ".mid", buildMidi(), "audio/midi"); });
   $("dlXml").addEventListener("click", () => { if (parsed) downloadBlob(fileBase() + "_標註.musicxml", annotatedXml(), "application/vnd.recordare.musicxml+xml"); });
 
-  // ---------- 圖檔辨識（連到本機後端 backend/server.py） ----------
+  // ---------- 圖檔辨識（連到後端 backend/server.py） ----------
+  // 目前先不開放圖檔辨識：改成 true 並重新 python3 build.py 即可啟用（後端程式都在 backend/）
+  const OMR_ENABLED = false;
+  if (!OMR_ENABLED) document.querySelectorAll(".omr-only").forEach((e) => (e.style.display = "none"));
   const omrBase = () => ($("omrUrl").value.trim() || "http://127.0.0.1:8765").replace(/\/+$/, "");
   let omrJobs = false;
   const omrHeaders = () => { const k = $("omrKey").value.trim(); return k ? { "X-API-Key": k } : {}; };
@@ -842,14 +845,18 @@
   $("omrKey").value = store.get("omrKey");
   $("omrUrl").addEventListener("change", () => { store.set("omrUrl", $("omrUrl").value.trim()); omrPing(); });
   $("omrKey").addEventListener("change", () => { store.set("omrKey", $("omrKey").value.trim()); omrPing(); });
-  omrPing();
+  if (OMR_ENABLED) omrPing();
 
   // drag & drop
   document.addEventListener("dragover", (e) => e.preventDefault());
   document.addEventListener("drop", async (e) => {
     e.preventDefault();
     const f = e.dataTransfer.files[0];
-    if (f && (/^image\//.test(f.type) || /\.pdf$/i.test(f.name))) { recognizeImage(f); return; }
+    if (f && (/^image\//.test(f.type) || /\.pdf$/i.test(f.name))) {
+      if (OMR_ENABLED) recognizeImage(f);
+      else $("err").textContent = "目前尚未開放圖檔辨識，請拖入 MusicXML（.musicxml／.xml／.mxl）檔。";
+      return;
+    }
     if (f) { try { await loadText(await readFileText(f), false); } catch (er) { $("err").textContent = "讀取失敗：" + er.message; } }
   });
 

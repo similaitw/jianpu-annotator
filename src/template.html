@@ -34,7 +34,7 @@ input[type=file]{display:none}
 <div class="bar">
 <h2>簡譜標註器</h2>
 <label class="btn" style="display:inline-block;margin-bottom:0">選擇 MusicXML 檔<input id="file" type="file" accept=".musicxml,.xml,.mxl"></label>
-<label class="btn alt" id="omrBtn" style="display:inline-block;margin-bottom:0">從圖檔辨識（PNG／JPG／PDF）<input id="omrFile" type="file" accept="image/*,.pdf"></label>
+<label class="btn alt omr-only" id="omrBtn" style="display:inline-block;margin-bottom:0">從圖檔辨識（PNG／JPG／PDF）<input id="omrFile" type="file" accept="image/*,.pdf"></label>
 <button id="sample" class="alt" type="button">載入範例（小星星）</button>
 <label>標註<select id="kind"><option value="jianpu">簡譜 1 2 3</option><option value="solfege">唱名 Do Re Mi</option><option value="name">音名 C D E</option></select></label>
 <label>調式<select id="mode"><option value="movable">首調（1=主音）</option><option value="fixed">絕對音／原調（C=1，加升降）</option></select></label>
@@ -56,7 +56,7 @@ input[type=file]{display:none}
 <button id="dlMidi" class="alt" type="button">下載 MIDI</button>
 <button id="dlXml" class="alt" type="button">下載標註 MusicXML</button>
 <span id="meta"></span>
-<details class="lyr"><summary>圖檔辨識設定</summary>
+<details class="lyr omr-only"><summary>圖檔辨識設定</summary>
 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:6px 0">
 <label>本機服務位址<input id="omrUrl" type="text" value="http://127.0.0.1:8765" style="width:220px"></label>
 <label>API 金鑰（遠端服務才需要）<input id="omrKey" type="password" autocomplete="off" style="width:200px"></label>
