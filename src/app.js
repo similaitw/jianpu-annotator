@@ -752,6 +752,7 @@
 
   // ---------- 圖檔辨識（連到本機後端 backend/server.py） ----------
   const omrBase = () => ($("omrUrl").value.trim() || "http://127.0.0.1:8765").replace(/\/+$/, "");
+  let omrJobs = false;
   const omrHeaders = () => { const k = $("omrKey").value.trim(); return k ? { "X-API-Key": k } : {}; };
   const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
   async function omrPing() {
@@ -761,6 +762,7 @@
       const to = setTimeout(() => ctl.abort(), 4000);
       const r = await fetch(omrBase() + "/health", { signal: ctl.signal });
       const j = await r.json();
+      omrJobs = !!j.jobs;
       let keyOk = true;
       if (j.auth) {
         const c = await fetch(omrBase() + "/check", { headers: omrHeaders(), signal: ctl.signal });
@@ -789,9 +791,29 @@
     fd.append("file", file);
     fd.append("page", $("omrPage").value || "1");
     try {
-      const r = await fetch(omrBase() + "/recognize", { method: "POST", body: fd, headers: omrHeaders() });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.detail || r.statusText);
+      let j;
+      if (omrJobs) {
+        // 通道（如 Cloudflare）有回應時間上限：先送出工作，再每 2 秒查一次結果
+        const r0 = await fetch(omrBase() + "/jobs", { method: "POST", body: fd, headers: omrHeaders() });
+        const j0 = await r0.json();
+        if (!r0.ok) throw new Error(j0.detail || r0.statusText);
+        const t0 = Date.now();
+        for (;;) {
+          await new Promise((res) => setTimeout(res, 2000));
+          const r1 = await fetch(omrBase() + "/jobs/" + j0.id, { headers: omrHeaders() });
+          j = await r1.json();
+          if (!r1.ok) throw new Error(j.detail || r1.statusText);
+          if (j.status === "done") break;
+          if (j.status === "error") throw new Error(j.detail || "辨識失敗");
+          const sec = Math.round((Date.now() - t0) / 1000);
+          st.textContent = (j.status === "queued" ? "排隊中…" : "辨識中…") + `（已等 ${sec} 秒）`;
+          if (sec > 1200) throw new Error("等待超過 20 分鐘，已放棄");
+        }
+      } else {
+        const r = await fetch(omrBase() + "/recognize", { method: "POST", body: fd, headers: omrHeaders() });
+        j = await r.json();
+        if (!r.ok) throw new Error(j.detail || r.statusText);
+      }
       showOriginal(file);
       await loadText(j.musicxml, false);
       $("title").value = file.name.replace(/\.[^.]+$/, "");

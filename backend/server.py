@@ -6,7 +6,7 @@
 
 啟動：  python server.py        （預設 http://127.0.0.1:8765）
 """
-import asyncio, hmac, os, shutil, subprocess, sys, tempfile
+import asyncio, hmac, os, shutil, subprocess, sys, tempfile, time, uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -21,6 +21,8 @@ API_KEY = os.environ.get("JIANPU_OMR_API_KEY", "").strip()          # 遠端部�
 ORIGINS = [o.strip() for o in os.environ.get("JIANPU_OMR_ORIGINS", "*").split(",") if o.strip()]
 CONCURRENCY = max(1, int(os.environ.get("JIANPU_OMR_CONCURRENCY", "1")))  # 同時辨識幾張（吃 CPU／記憶體）
 MAX_WAITING = int(os.environ.get("JIANPU_OMR_MAX_WAITING", "4"))          # 排隊上限，超過回 429
+JOBS = os.environ.get("JIANPU_OMR_JOBS", "") == "1"                 # 啟用 /jobs（通道有回應時間上限時用）
+JOB_TTL = 1800
 _sem = asyncio.Semaphore(CONCURRENCY)
 _waiting = 0
 
@@ -69,7 +71,7 @@ def require_key(x_api_key: str = Header(default="")):
 @app.get("/health")
 def health():
     ok = bool(shutil.which("homr")) or _can_import("homr")
-    return {"ok": True, "homr": ok, "auth": bool(API_KEY)}
+    return {"ok": True, "homr": ok, "auth": bool(API_KEY), "jobs": JOBS}
 
 
 @app.get("/check", dependencies=[Depends(require_key)])
@@ -82,16 +84,16 @@ def _can_import(name):
     return importlib.util.find_spec(name) is not None
 
 
-@app.post("/recognize")
-async def recognize(file: UploadFile = File(...), page: int = Form(1), _auth=Depends(require_key)):
+ALLOWED_SUFFIX = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff", ".pdf"}
+
+
+async def _run_omr(data: bytes, filename: str, page: int) -> str:
+    """實際辨識（含排隊）。成功回 MusicXML 字串，失敗丟 HTTPException。"""
     global _waiting
-    if _waiting >= MAX_WAITING:
-        raise HTTPException(429, "目前辨識的人太多，請稍後再試")
-    data = await file.read()
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "檔案太大（上限 40 MB）")
-    suffix = Path(file.filename or "score.png").suffix.lower() or ".png"
-    if suffix not in {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff", ".pdf"}:
+    suffix = Path(filename or "score.png").suffix.lower() or ".png"
+    if suffix not in ALLOWED_SUFFIX:
         raise HTTPException(400, "只支援 PNG、JPG、BMP、WebP、TIFF 或 PDF")
     with tempfile.TemporaryDirectory(prefix="jianpu_omr_") as td:
         td = Path(td)
@@ -120,8 +122,68 @@ async def recognize(file: UploadFile = File(...), page: int = Form(1), _auth=Dep
         if proc.returncode != 0 or not out.exists():
             tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-6:]
             raise HTTPException(422, "辨識失敗：" + " / ".join(tail))
-        xml = out.read_text(encoding="utf-8")
+        return out.read_text(encoding="utf-8")
+
+
+@app.post("/recognize")
+async def recognize(file: UploadFile = File(...), page: int = Form(1), _auth=Depends(require_key)):
+    """同步辨識：連線會一直開著直到辨識完成（本機、Cloud Run 適用）。"""
+    if _waiting >= MAX_WAITING:
+        raise HTTPException(429, "目前辨識的人太多，請稍後再試")
+    xml = await _run_omr(await file.read(), file.filename, page)
     return {"musicxml": xml, "engine": "homr"}
+
+
+# ---- 非同步工作（Cloudflare Tunnel 等有 100 秒回應上限的通道用）----
+_jobs: dict = {}
+
+
+def _gc_jobs():
+    now = time.time()
+    for k in [k for k, v in _jobs.items() if now - v["t"] > JOB_TTL]:
+        _jobs.pop(k, None)
+
+
+async def _job_worker(jid: str, data: bytes, filename: str, page: int):
+    job = _jobs[jid]
+    job["status"] = "running"
+    try:
+        job["musicxml"] = await _run_omr(data, filename, page)
+        job["status"] = "done"
+    except HTTPException as e:
+        job["status"], job["detail"] = "error", str(e.detail)
+    except Exception as e:  # noqa
+        job["status"], job["detail"] = "error", f"內部錯誤：{e}"
+    job["t"] = time.time()
+
+
+@app.post("/jobs")
+async def create_job(file: UploadFile = File(...), page: int = Form(1), _auth=Depends(require_key)):
+    if not JOBS:
+        raise HTTPException(404, "此服務未啟用非同步工作（JIANPU_OMR_JOBS=1）")
+    _gc_jobs()
+    if _waiting >= MAX_WAITING:
+        raise HTTPException(429, "目前辨識的人太多，請稍後再試")
+    data = await file.read()
+    if len(data) > MAX_BYTES:
+        raise HTTPException(413, "檔案太大（上限 40 MB）")
+    jid = uuid.uuid4().hex
+    _jobs[jid] = {"status": "queued", "t": time.time()}
+    asyncio.create_task(_job_worker(jid, data, file.filename, page))
+    return {"id": jid}
+
+
+@app.get("/jobs/{jid}", dependencies=[Depends(require_key)])
+def job_status(jid: str):
+    job = _jobs.get(jid)
+    if not job:
+        raise HTTPException(404, "找不到這個工作（可能已過期）")
+    out = {"status": job["status"]}
+    if job["status"] == "done":
+        out["musicxml"] = job["musicxml"]
+    if job["status"] == "error":
+        out["detail"] = job.get("detail", "")
+    return out
 
 
 if __name__ == "__main__":

@@ -62,6 +62,29 @@ Cloud Run 有「永遠免費」額度，沒人用時縮到 0 台、不計費。�
 
 注意：第一次呼叫（冷啟動）要多等 10–30 秒；免費額度與計價以 [Cloud Run 官方頁面](https://cloud.google.com/run/pricing) 為準。
 
+## 免費遠端（不綁信用卡）：家裡電腦 + Cloudflare Tunnel
+電腦繼續跑 Docker，再用 Cloudflare Tunnel 把它接到網路上，不用開路由器埠、不用固定 IP。缺點是**電腦要開機、Docker 要在跑**。
+Cloudflare 對單一請求有約 100 秒的回應上限，整頁辨識可能超過，所以這個模式自動改成「送出工作 → 網頁每 2 秒查一次結果」，辨識多久都不會斷線。
+
+```
+cd backend
+cp .env.tunnel.example .env        # 改 API_KEY（自訂長密碼）
+```
+**模式 A：臨時網址（免帳號，最簡單）**
+```
+docker compose -f docker-compose.tunnel.yml --profile quick up -d --build
+docker compose -f docker-compose.tunnel.yml logs cloudflared-quick     # 找 https://xxxx.trycloudflare.com
+```
+把那個網址和 API 金鑰填進網頁「圖檔辨識設定」。**每次重啟網址都會變**，適合試用。
+
+**模式 B：固定網址**（需要 Cloudflare 帳號，以及一個託管在 Cloudflare 的網域）
+1. Cloudflare Zero Trust → Networks → Tunnels → 建立隧道，取得 token
+2. 該隧道的 Public hostname：服務填 `http://omr:8765`
+3. token 填進 `.env` 的 `TUNNEL_TOKEN`，`ORIGINS` 改成你的網站網址
+4. `docker compose -f docker-compose.tunnel.yml --profile named up -d --build`
+
+安全：一定要設 `API_KEY`（沒金鑰任何人拿到網址都能用你的電腦辨識）；圖檔會經過 Cloudflare 再到你家電腦，辨識完即刪除。
+
 ## 開發
 ```
 python3 build.py     # src/ + vendor/ → index.html

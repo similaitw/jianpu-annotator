@@ -1,0 +1,36 @@
+# 家裡電腦的 Docker + Cloudflare Tunnel：把本機辨識服務接到網路上（不用開路由器埠、不用固定 IP）
+#
+# 模式 A（最簡單，免帳號）：臨時網址 https://xxxx.trycloudflare.com，每次重啟都會換
+#   cp .env.tunnel.example .env   （改 API_KEY）
+#   docker compose -f docker-compose.tunnel.yml --profile quick up -d --build
+#   docker compose -f docker-compose.tunnel.yml logs cloudflared-quick | findstr trycloudflare   （Mac/Linux 用 grep）
+#
+# 模式 B（固定網址）：需要 Cloudflare 帳號與一個託管在 Cloudflare 的網域；在 Zero Trust → Networks → Tunnels 建立隧道，
+#   Public hostname 的服務填 http://omr:8765，把 token 填進 .env 的 TUNNEL_TOKEN
+#   docker compose -f docker-compose.tunnel.yml --profile named up -d --build
+services:
+  omr:
+    build: .
+    image: jianpu-annotator-omr
+    restart: unless-stopped
+    environment:
+      JIANPU_OMR_API_KEY: ${API_KEY:?請在 .env 設定 API_KEY}
+      JIANPU_OMR_ORIGINS: ${ORIGINS:-*}
+      JIANPU_OMR_CONCURRENCY: ${CONCURRENCY:-1}
+      JIANPU_OMR_JOBS: "1"          # Cloudflare 有約 100 秒回應上限，改用「送出→輪詢」
+    expose:
+      - "8765"
+
+  cloudflared-quick:
+    profiles: ["quick"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --url http://omr:8765
+    depends_on: [omr]
+
+  cloudflared-named:
+    profiles: ["named"]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
+    depends_on: [omr]
