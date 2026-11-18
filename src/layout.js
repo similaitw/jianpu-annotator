@@ -44,3 +44,17 @@
     const menu = document.querySelector(".menu");
     document.addEventListener("click", (e) => { if (menu.open && (!menu.contains(e.target) || e.target.closest(".menu-box button"))) menu.open = false; });
   })();
+  (function initDrawer() {
+    const ids = ["singPanel", "edPanel", "layPanel"];
+    document.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.open, wasOpen = !$(id).hidden;
+      ids.forEach((p) => ($(p).hidden = true));
+      $(id).hidden = wasOpen;
+      document.querySelectorAll("[data-open]").forEach((x) => x.classList.toggle("on", !$(x.dataset.open).hidden));
+      if (!wasOpen) $(id).scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }));
+    document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => {
+      $(b.dataset.close).hidden = true;
+      document.querySelectorAll("[data-open]").forEach((x) => x.classList.toggle("on", !$(x.dataset.open).hidden));
+    }));
+  })();

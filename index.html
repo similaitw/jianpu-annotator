@@ -18,6 +18,16 @@ body{margin:0;font-family:"Noto Sans TC","Noto Sans CJK TC","Microsoft JhengHei"
 .layout{display:flex;align-items:flex-start;gap:14px;padding:12px 14px}
 .side{flex:0 0 340px;width:340px;position:sticky;top:60px;max-height:calc(100vh - 72px);overflow-y:auto;padding-right:2px}
 .main{flex:1 1 auto;min-width:0}
+.tabs .tab{background:#fff;color:#2b6cb0;border-color:#9db9d8}
+.tabs .tab.on{background:#2b6cb0;color:#fff;border-color:#2b6cb0}
+.drawer{margin:0 auto 12px;max-width:1040px}
+.drawer .dp{margin-bottom:0;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+.drawer .dp[hidden]{display:none}
+.drawer h3{display:flex;justify-content:space-between;align-items:center}
+.drawer .x{background:none;border:none;color:#556;font-size:22px;line-height:1;padding:0 6px}
+.dp.sing:not([hidden]){display:grid;grid-template-columns:minmax(240px,.9fr) 1.3fr;gap:0 22px}
+.dp.sing>h3{grid-column:1/-1}
+@media (max-width:899px){.dp.sing:not([hidden]){display:block}}
 .checks{display:flex;flex-wrap:wrap;gap:4px 14px}
 .side .panel{margin-bottom:8px;padding:10px 12px}
 .side input[type=text]{width:100%}
@@ -66,7 +76,7 @@ input[type=file]{display:none}
 .sg-meter div{height:100%;width:0;background:#2a9d4a}
 #sgCanvas{width:100%;height:90px;border-radius:6px;display:block}
 .sg-state{margin:6px 0;color:#445;font-size:14px}
-.sg-bar{position:sticky;bottom:0;background:#fff;padding:8px 0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;border-top:1px solid #eef0f3}
+.sg-bar{background:#fff;padding:8px 0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;border-top:1px solid #eef0f3}
 .sg-big{min-width:150px;height:52px;font-size:18px;font-weight:700;border-radius:26px}
 .sg-big.stop{background:#c0392b;border-color:#c0392b}
 .sg-msg{font-size:14px;color:#1b5e20;margin:4px 0}
@@ -88,6 +98,11 @@ input[type=file]{display:none}
 <label class="btn" style="display:inline-block;margin:0">開啟檔案<input id="file" type="file" accept=".musicxml,.xml,.mxl,.mid,.midi"></label>
 <label class="btn alt omr-only" id="omrBtn" style="display:inline-block;margin:0">圖檔辨識<input id="omrFile" type="file" accept="image/*,.pdf"></label>
 <button id="sample" class="alt" type="button">範例</button>
+</div>
+<div class="top-act tabs">
+<button type="button" class="tab" data-open="singPanel">🎤 唱歌輸入</button>
+<button type="button" class="tab" data-open="edPanel">✎ 線上編寫</button>
+<button type="button" class="tab" data-open="layPanel">⚙ 版面設定</button>
 </div>
 <span id="meta"></span>
 <div class="top-act right">
@@ -138,7 +153,11 @@ input[type=file]{display:none}
 <span id="omrStatus" style="font-size:13px"></span></div>
 <div class="hint" style="margin:0">服務位址預設是你自己電腦（127.0.0.1），圖檔不會離開電腦。若填的是遠端網址，圖檔會送到那台主機；網址與金鑰只存在這個瀏覽器。辨識用 homr。</div>
 </details>
-<div id="midiPanel" class="panel" hidden>
+<div class="hint side-hint">可直接把 .musicxml / .xml / .mxl / .mid 拖進視窗。所有處理都在你的瀏覽器內完成，檔案不會上傳。列印時請選 A4。目前只取第一聲部；和弦取最高音。簡譜字級放大後若太擠，請把「每行小節數」調少。</div>
+</aside>
+<main class="main">
+<div class="drawer">
+<section id="midiPanel" class="panel dp" hidden>
 <h3>匯入 MIDI → 轉成 MusicXML</h3>
 <div id="midiTracks" class="trks"></div>
 <div class="grid">
@@ -152,9 +171,9 @@ input[type=file]{display:none}
 <div class="hint" style="margin:6px 0">MIDI 只有音高與時間，沒有記譜資訊，轉出來是「單聲部旋律」。節奏會被量化，演奏型 MIDI（有搖擺或自由速度）請選八分音符量化並事後檢查。</div>
 <button id="midiGo" type="button">轉換並載入</button> <button id="midiCancel" class="alt" type="button">取消</button>
 <span id="midiErr" class="err"></span>
-</div>
-<details id="singPanel" class="panel"><summary>唱歌輸入（跟著節拍器唱，轉成譜）</summary>
-<div class="sg-live">
+</section>
+<section id="singPanel" class="panel dp sing" hidden><h3>唱歌輸入（跟著節拍器唱，轉成譜）<button type="button" class="x" data-close="singPanel">×</button></h3>
+<div class="sg-left"><div class="sg-live">
 <div class="sg-note" id="sgNote">–</div>
 <div class="sg-sub" id="sgSub">按「開始錄音」後跟著節拍器唱</div>
 <div class="sg-dots" id="sgDots"></div>
@@ -167,7 +186,8 @@ input[type=file]{display:none}
 <button id="sgStop" type="button" class="sg-big stop" hidden>■ 停止並轉換</button>
 <button id="sgClick" type="button" class="alt">試聽節拍</button>
 <button id="sgAgain" type="button" class="alt" disabled>重新轉換</button>
-</div>
+</div></div>
+<div class="sg-right">
 <div class="grid">
 <label>拍號<span class="inl"><input id="sgBeats" type="number" min="1" max="16" value="4"> / <select id="sgBeatType"><option>4</option><option>8</option><option>2</option></select></span></label>
 <label>速度（每分鐘幾個四分音符）<input id="sgBpm" type="number" min="30" max="240" value="80"></label>
@@ -182,8 +202,9 @@ input[type=file]{display:none}
 <div class="hint" style="margin:4px 0;line-height:1.7">建議<b>戴耳機</b>，避免節拍聲被麥克風收進去。用「啦」或「嗚」單一母音唱，每個音之間稍微斷開，同音連唱（1 1）時換氣或輕輕斷一下。錄完會自動轉成樂譜載入下方；節奏切歪時，先試「最短音符」選八分、速度調慢，或調整「延遲補償」，不用重唱，按「重新轉換」即可。
 所有處理都在你的瀏覽器內完成，錄音不會上傳。</div>
 <div class="sg-msg" id="sgInfo"></div><span id="sgErr" class="err"></span>
-</details>
-<details id="layPanel" class="panel"><summary>版面設定</summary>
+</div>
+</section>
+<section id="layPanel" class="panel dp" hidden><h3>版面設定<button type="button" class="x" data-close="layPanel">×</button></h3>
 <div class="grid">
 <label>預設組<select id="layPreset"></select></label>
 <label>左右邊距（px）<input id="sideMargin" type="number" min="0" max="60" step="1" value="14"></label>
@@ -197,8 +218,8 @@ input[type=file]{display:none}
 <button id="layExport" class="alt" type="button">匯出設定檔</button>
 <label class="btn alt" style="display:inline-block;margin:0">匯入設定檔<input id="layImport" type="file" accept=".json"></label>
 <span id="layErr" class="err"></span>
-</details>
-<details id="edPanel" class="panel"><summary>線上編寫（簡譜文字輸入）</summary>
+</section>
+<section id="edPanel" class="panel dp" hidden><h3>線上編寫（簡譜文字輸入）<button type="button" class="x" data-close="edPanel">×</button></h3>
 <div class="grid">
 <label>標題<input id="edTitle" type="text"></label>
 <label>調號<select id="edKey"></select></label>
@@ -216,10 +237,8 @@ input[type=file]{display:none}
 </div>
 <button id="edExample" class="alt" type="button">放入範例</button> <button id="edClear" class="alt" type="button">清除</button>
 <span id="edErr" class="err"></span>
-</details>
-<div class="hint side-hint">可直接把 .musicxml / .xml / .mxl / .mid 拖進視窗。所有處理都在你的瀏覽器內完成，檔案不會上傳。列印時請選 A4。目前只取第一聲部；和弦取最高音。簡譜字級放大後若太擠，請把「每行小節數」調少。</div>
-</aside>
-<main class="main">
+</section>
+</div>
 <div class="page"><div id="origBox" class="orig"></div><div id="sheet"></div></div>
 </main>
 </div>
@@ -1328,6 +1347,20 @@ input[type=file]{display:none}
     if (window.matchMedia("(min-width:900px)").matches) { $("pShow").open = true; $("pInfo").open = true; }
     const menu = document.querySelector(".menu");
     document.addEventListener("click", (e) => { if (menu.open && (!menu.contains(e.target) || e.target.closest(".menu-box button"))) menu.open = false; });
+  })();
+  (function initDrawer() {
+    const ids = ["singPanel", "edPanel", "layPanel"];
+    document.querySelectorAll("[data-open]").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.open, wasOpen = !$(id).hidden;
+      ids.forEach((p) => ($(p).hidden = true));
+      $(id).hidden = wasOpen;
+      document.querySelectorAll("[data-open]").forEach((x) => x.classList.toggle("on", !$(x.dataset.open).hidden));
+      if (!wasOpen) $(id).scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }));
+    document.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => {
+      $(b.dataset.close).hidden = true;
+      document.querySelectorAll("[data-open]").forEach((x) => x.classList.toggle("on", !$(x.dataset.open).hidden));
+    }));
   })();
 
     // =====================================================================
