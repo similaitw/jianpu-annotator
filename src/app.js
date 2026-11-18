@@ -295,13 +295,14 @@
     if (kind === "name") modeStr = `音名（${keyStr}）`;
     else if (mode === "fixed") modeStr = kind === "jianpu" ? `絕對音 C=1（原調 ${keyStr}）` : `${kindZh} 固定唱名（原調 ${keyStr}）`;
     else modeStr = `首調 1=${tonicName(info.fifths, info.minor, minorMode)}（${keyStr}）`;
-    const subtitle = $("subtitle").value.trim() || `${showStaff ? "五線譜・" + kindZh + "對照" : kindZh}　${modeStr}　${info.beats}/${info.beatType} 拍${tempoStr}`;
+    const subtitle = $("subtitle").value.trim();
 
     const h = document.createElement("div");
     h.className = "head";
     h.innerHTML = `<h1></h1><p class="sub"></p><p class="by"></p>`;
     h.querySelector("h1").textContent = $("title").value.trim() || info.title || "（未命名）";
     h.querySelector(".sub").textContent = subtitle;
+    if (!subtitle) h.querySelector(".sub").style.display = "none";
     const by = [];
     const comp = $("composer").value.trim(), orig = $("singer").value.trim();
     if (comp) by.push("作曲：" + comp);

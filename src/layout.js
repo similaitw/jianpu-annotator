@@ -39,3 +39,8 @@
     });
     LAYOUT_IDS.forEach((id) => { $(id).addEventListener("input", saveLayout); $(id).addEventListener("change", saveLayout); });
   })();
+  (function initChrome() {
+    if (window.matchMedia("(min-width:900px)").matches) { $("pShow").open = true; $("pInfo").open = true; }
+    const menu = document.querySelector(".menu");
+    document.addEventListener("click", (e) => { if (menu.open && (!menu.contains(e.target) || e.target.closest(".menu-box button"))) menu.open = false; });
+  })();

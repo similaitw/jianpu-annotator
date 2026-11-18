@@ -5,8 +5,34 @@
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:"Noto Sans TC","Noto Sans CJK TC","Microsoft JhengHei","PingFang TC",sans-serif;background:#eef1f4;color:#1b2430}
-.bar{background:#fff;border-bottom:1px solid #d5dbe2;padding:14px 20px;display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end;position:sticky;top:0;z-index:5}
-.bar h2{margin:0 8px 0 0;font-size:18px;width:100%}
+.top{background:#fff;border-bottom:1px solid #d5dbe2;padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;position:sticky;top:0;z-index:20}
+.top h2{margin:0;font-size:17px}
+.top-act{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.top-act.right{margin-left:auto}
+.spd{flex-direction:row;align-items:center;gap:6px;font-size:12px}
+.spd input{width:90px}
+.menu{position:relative}
+.menu summary{list-style:none;cursor:pointer;font-size:14px;padding:7px 14px;border-radius:6px;border:1px solid #2b6cb0;color:#2b6cb0;background:#fff}
+.menu summary::-webkit-details-marker{display:none}
+.menu-box{position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #d5dbe2;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:150px;z-index:30}
+.layout{display:flex;align-items:flex-start;gap:14px;padding:12px 14px}
+.side{flex:0 0 340px;width:340px;position:sticky;top:60px;max-height:calc(100vh - 72px);overflow-y:auto;padding-right:2px}
+.main{flex:1 1 auto;min-width:0}
+.checks{display:flex;flex-wrap:wrap;gap:4px 14px}
+.side .panel{margin-bottom:8px;padding:10px 12px}
+.side input[type=text]{width:100%}
+.side .grid label{flex:1 1 130px}
+.side .grid select,.side .grid input[type=number]{width:100%}
+.side .inl input,.side .inl select{width:auto}
+.side-hint{margin:6px 2px 24px}
+@media (max-width:899px){
+.top{position:static;padding:8px 10px}
+.top-act.right{margin-left:0;width:100%}
+.layout{flex-direction:column;padding:8px}
+.side{flex:none;width:100%;position:static;max-height:none;overflow:visible}
+.main{width:100%}
+button,.btn,.menu summary{padding:9px 14px}
+}
 label{display:flex;flex-direction:column;font-size:12px;color:#556;gap:3px}
 input[type=text],input[type=number],select{font:inherit;font-size:14px;padding:6px 8px;border:1px solid #c5ccd5;border-radius:6px;background:#fff;min-width:0}
 input[type=text]{width:150px}
@@ -15,12 +41,11 @@ label.chk{flex-direction:row;align-items:center;gap:6px;font-size:14px;color:#1b
 button,.btn{font:inherit;font-size:14px;padding:7px 14px;border-radius:6px;border:1px solid #2b6cb0;background:#2b6cb0;color:#fff;cursor:pointer}
 button.alt,.btn.alt{background:#fff;color:#2b6cb0}
 input[type=file]{display:none}
-#meta{font-size:13px;color:#556;padding-bottom:8px}
+#meta{font-size:13px;color:#556}
 #err{color:#b42318;font-size:13px;width:100%}
 .lyr{width:100%;font-size:13px;color:#445}.lyr textarea{width:100%;font:inherit;font-size:14px;padding:6px 8px;border:1px solid #c5ccd5;border-radius:6px}
 .orig{margin-bottom:10px}.orig img{max-width:100%;border:1px solid #d5dbe2}
 @media print{.orig{display:none}}
-.tools{max-width:210mm;margin:12px auto 0;padding:0 8px}
 .panel{background:#fff;border:1px solid #d5dbe2;border-radius:8px;padding:12px 14px;margin-bottom:10px;font-size:14px}
 .panel h3{margin:0 0 8px;font-size:16px}
 .panel summary{cursor:pointer;font-weight:700}
@@ -31,7 +56,6 @@ input[type=file]{display:none}
 .inl input{width:54px}
 .chk2{flex-direction:row;align-items:center;gap:6px;font-size:14px;color:#1b2430;padding-bottom:6px}
 .err{color:#b42318;font-size:13px;margin-left:8px}
-@media print{.tools{display:none}}
 .sg-live{text-align:center}
 .sg-note{font-size:56px;font-weight:800;line-height:1.1;color:#111}
 .sg-sub{color:#445;font-size:15px;min-height:22px}
@@ -47,7 +71,8 @@ input[type=file]{display:none}
 .sg-big.stop{background:#c0392b;border-color:#c0392b}
 .sg-msg{font-size:14px;color:#1b5e20;margin:4px 0}
 .hint{font-size:12px;color:#667;width:100%}
-.page{width:210mm;max-width:100%;margin:18px auto;background:#fff;padding:14mm 12mm;box-shadow:0 2px 12px rgba(0,0,0,.12)}
+.page{width:100%;max-width:1040px;margin:0 auto 18px;background:#fff;padding:10mm 10mm;box-shadow:0 2px 12px rgba(0,0,0,.12)}
+@media (max-width:899px){.page{padding:8px}}
 .head{text-align:center;margin-bottom:6px}
 .head h1{font-size:22px;margin:0 0 4px;font-family:"Noto Serif TC","Noto Serif CJK TC","PMingLiU",serif}
 .head .sub{margin:0 0 6px;font-size:13px;font-weight:700;font-family:"Noto Serif TC","Noto Serif CJK TC",serif}
@@ -55,34 +80,56 @@ input[type=file]{display:none}
 .row{break-inside:avoid;margin-bottom:4px}
 .row svg{display:block}
 @page{size:A4;margin:10mm}
-@media print{body{background:#fff}.bar{display:none}.page{box-shadow:none;margin:0;padding:0;width:auto}}
+@media print{body{background:#fff}.top,.side{display:none}.layout{display:block;padding:0}.page{box-shadow:none;margin:0;padding:0;width:auto;max-width:none}}
 </style></head><body>
-<div class="bar">
+<div class="top">
 <h2>簡譜標註器</h2>
-<label class="btn" style="display:inline-block;margin-bottom:0">選擇 MusicXML／MIDI 檔<input id="file" type="file" accept=".musicxml,.xml,.mxl,.mid,.midi"></label>
-<label class="btn alt omr-only" id="omrBtn" style="display:inline-block;margin-bottom:0">從圖檔辨識（PNG／JPG／PDF）<input id="omrFile" type="file" accept="image/*,.pdf"></label>
-<button id="sample" class="alt" type="button">載入範例（小星星）</button>
+<div class="top-act">
+<label class="btn" style="display:inline-block;margin:0">開啟檔案<input id="file" type="file" accept=".musicxml,.xml,.mxl,.mid,.midi"></label>
+<label class="btn alt omr-only" id="omrBtn" style="display:inline-block;margin:0">圖檔辨識<input id="omrFile" type="file" accept="image/*,.pdf"></label>
+<button id="sample" class="alt" type="button">範例</button>
+</div>
+<span id="meta"></span>
+<div class="top-act right">
+<button id="play" type="button">▶ 播放</button>
+<label class="spd">速度 <span id="speedv">100%</span><input id="speed" type="range" min="50" max="150" step="5" value="100"></label>
+<button id="print" type="button">列印／PDF</button>
+<details class="menu"><summary>下載</summary><div class="menu-box">
+<button id="dlMidi" class="alt" type="button">MIDI</button>
+<button id="dlXmlPlain" class="alt" type="button">MusicXML</button>
+<button id="dlXml" class="alt" type="button">標註版 MusicXML</button>
+</div></details>
+</div>
+</div>
+<div class="layout">
+<aside class="side">
+<div id="err"></div>
+<details class="panel" id="pShow"><summary>顯示</summary>
+<div class="grid">
 <label>標註<select id="kind"><option value="jianpu">簡譜 1 2 3</option><option value="solfege">唱名 Do Re Mi</option><option value="name">音名 C D E</option></select></label>
-<label>調式<select id="mode"><option value="fixed" selected>絕對音／原調（C=1，加升降）</option><option value="movable">首調（1=主音）</option></select></label>
+<label>調式<select id="mode"><option value="fixed" selected>絕對音（C=1）</option><option value="movable">首調（1=主音）</option></select></label>
 <label>小調主音<select id="minorMode"><option value="la">6 為主音（la）</option><option value="do">1 為主音（do）</option></select></label>
 <label>每行小節數<input id="perRow" type="number" min="1" max="8" value="4"></label>
 <label>簡譜字級<input id="fontSize" type="number" min="10" max="36" step="1" value="17"></label>
+<label>歌詞字級<input id="lyricSize" type="number" min="8" max="30" step="1" value="13"></label>
+</div>
+<div class="checks">
+<label class="chk"><input id="showStaff" type="checkbox" checked>五線譜</label>
 <label class="chk"><input id="showTies" type="checkbox" checked>連結線</label>
 <label class="chk"><input id="showSlurs" type="checkbox" checked>圓滑線</label>
-<label class="chk"><input id="showLyrics" type="checkbox" checked>顯示歌詞</label>
-<label>歌詞字級<input id="lyricSize" type="number" min="8" max="30" step="1" value="13"></label>
-<label class="chk"><input id="showStaff" type="checkbox" checked>顯示五線譜</label>
+<label class="chk"><input id="showLyrics" type="checkbox" checked>歌詞</label>
+</div>
+</details>
+<details class="panel" id="pInfo"><summary>標題與歌詞</summary>
+<div class="grid">
 <label>標題<input id="title" type="text"></label>
 <label>作曲<input id="composer" type="text"></label>
 <label>演唱／來源<input id="singer" type="text"></label>
-<label>副標題（留空自動產生）<input id="subtitle" type="text" style="width:240px"></label>
-<button id="print" type="button">列印／存成 PDF</button>
-<button id="play" type="button">▶ 播放</button>
-<label>速度 <span id="speedv">100%</span><input id="speed" type="range" min="50" max="150" step="5" value="100" style="width:110px"></label>
-<button id="dlMidi" class="alt" type="button">下載 MIDI</button>
-<button id="dlXmlPlain" class="alt" type="button">下載 MusicXML</button>
-<button id="dlXml" class="alt" type="button">下載標註 MusicXML</button>
-<span id="meta"></span>
+<label>副標題（選填）<input id="subtitle" type="text"></label>
+</div>
+<div class="lyr"><div style="margin:4px 0;font-size:13px;color:#445">貼上歌詞（會取代檔案裡的歌詞；一行一段）</div>
+<textarea id="lyricText" rows="4" placeholder="中文每個字對應一個音；英文用空格或 - 分音節；用 _ 表示這個音沒有字"></textarea></div>
+</details>
 <details class="lyr omr-only"><summary>圖檔辨識設定</summary>
 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:6px 0">
 <label>本機服務位址<input id="omrUrl" type="text" value="http://127.0.0.1:8765" style="width:220px"></label>
@@ -91,13 +138,6 @@ input[type=file]{display:none}
 <span id="omrStatus" style="font-size:13px"></span></div>
 <div class="hint" style="margin:0">服務位址預設是你自己電腦（127.0.0.1），圖檔不會離開電腦。若填的是遠端網址，圖檔會送到那台主機；網址與金鑰只存在這個瀏覽器。辨識用 homr。</div>
 </details>
-<details class="lyr"><summary>貼上歌詞（會取代檔案裡的歌詞；一行一段）</summary>
-<textarea id="lyricText" rows="4" placeholder="中文每個字對應一個音；英文用空格或 - 分音節；用 _ 表示這個音沒有字"></textarea>
-</details>
-<div id="err"></div>
-<div class="hint">可直接把 .musicxml / .xml / .mxl 拖進視窗。所有處理都在你的瀏覽器內完成，檔案不會上傳。列印時請選 A4。目前只取第一聲部；和弦取最高音；連結線（tie）以兩個數字呈現。簡譜字級放大後若太擠，請把「每行小節數」調少。</div>
-</div>
-<div class="tools">
 <div id="midiPanel" class="panel" hidden>
 <h3>匯入 MIDI → 轉成 MusicXML</h3>
 <div id="midiTracks" class="trks"></div>
@@ -177,8 +217,12 @@ input[type=file]{display:none}
 <button id="edExample" class="alt" type="button">放入範例</button> <button id="edClear" class="alt" type="button">清除</button>
 <span id="edErr" class="err"></span>
 </details>
-</div>
+<div class="hint side-hint">可直接把 .musicxml / .xml / .mxl / .mid 拖進視窗。所有處理都在你的瀏覽器內完成，檔案不會上傳。列印時請選 A4。目前只取第一聲部；和弦取最高音。簡譜字級放大後若太擠，請把「每行小節數」調少。</div>
+</aside>
+<main class="main">
 <div class="page"><div id="origBox" class="orig"></div><div id="sheet"></div></div>
+</main>
+</div>
 <script>%%VEXFLOW%%</script>
 <script>%%SAMPLE%%</script>
 <script>%%APP%%</script>
