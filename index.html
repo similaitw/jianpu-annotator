@@ -186,6 +186,7 @@ input[type=file]{display:none}
 <button id="sgStop" type="button" class="sg-big stop" hidden>■ 停止並轉換</button>
 <button id="sgClick" type="button" class="alt">試聽節拍</button>
 <button id="sgAgain" type="button" class="alt" disabled>重新轉換</button>
+<button id="sgCal" type="button" class="alt">校準延遲</button>
 </div></div>
 <div class="sg-right">
 <div class="grid">
@@ -1481,6 +1482,15 @@ input[type=file]{display:none}
       if (o.e - o.s < Math.max(3, minF - 2)) { const p = res[res.length - 1]; if (p && o.s - p.e <= 3) p.e = o.e; return; }
       res.push(o);
     });
+    // 起音往前補：音高尚未穩定的子音／起音段（音量已上來、音高偵測不到）算進這個音，才不會吃掉開頭
+    res.forEach((r, ix) => {
+      let pk = 0;
+      for (let k = r.s; k < Math.min(r.e, r.s + 10); k++) pk = Math.max(pk, sr[k]);
+      const floor = ix ? res[ix - 1].e : 0;
+      let k = r.s;
+      while (k - 1 >= floor && k > r.s - 10 && sm[k - 1] == null && frames[k - 1].rms > Math.max(0.012, 0.25 * pk)) k--;
+      r.s = k;
+    });
     return res.map((r) => ({ start: frames[r.s].t, end: frames[Math.min(n, r.e) - 1].t + SG_HOP, midi: r.midi }));
   }
 
@@ -1541,7 +1551,7 @@ input[type=file]{display:none}
       const frames = [];
       let k = 0;
       const tEnd = raw.length ? raw[raw.length - 1].t : 0;
-      for (let t = t0; t <= tEnd; t += SG_HOP) {
+      for (let t = t0 - 0.25; t <= tEnd; t += SG_HOP) { // 往前多取 0.25 秒，搶拍的第一個音才不會被切掉
         while (k + 1 < raw.length && Math.abs(raw[k + 1].t - t) <= Math.abs(raw[k].t - t)) k++;
         const s = raw[k];
         const ok = s && Math.abs(s.t - t) < 0.05;
@@ -1621,6 +1631,60 @@ input[type=file]{display:none}
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
     o.connect(g); g.connect(ctx.destination);
     o.start(t); o.stop(t + 0.08);
+  }
+
+  // 由量到的音量曲線找出每次「哒」的起音，與節拍器時間比對，得到延遲（毫秒）
+  function sgCalcLat(samples, clicks) {
+    if (samples.length < 20) return null;
+    const mx = Math.max(...samples.map((x) => x.rms));
+    const thr = Math.max(0.02, 0.3 * mx);
+    const ons = [];
+    let quiet = 0;
+    samples.forEach((x, i) => {
+      if (x.rms < thr * 0.6) quiet = x.t;
+      else if (x.rms >= thr && x.t - quiet < 0.2 && (!ons.length || x.t - ons[ons.length - 1] > 0.25) && quiet > 0) ons.push(x.t);
+    });
+    const diffs = [];
+    clicks.slice(2).forEach((c) => {
+      let best = null;
+      ons.forEach((o) => { if (Math.abs(o - c) < 0.3 && (best == null || Math.abs(o - c) < Math.abs(best - c))) best = o; });
+      if (best != null) diffs.push((best - c) * 1000);
+    });
+    if (diffs.length < 3) return null;
+    return Math.round(Math.max(-300, Math.min(300, sgMedian(diffs))));
+  }
+
+  async function sgCalibrate() {
+    const err = $("sgErr"), btn = $("sgCal");
+    err.textContent = "";
+    if (sgRec) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { err.textContent = "這個瀏覽器不支援麥克風錄音（需要 https 網址）"; return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }); }
+    catch (e) { err.textContent = "無法使用麥克風：請在瀏覽器網址列允許麥克風權限"; return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    if (ctx.state === "suspended") await ctx.resume();
+    const an = ctx.createAnalyser(); an.fftSize = 1024;
+    ctx.createMediaStreamSource(stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    const lag = an.fftSize / 2 / ctx.sampleRate + (ctx.baseLatency || 0);
+    const bs = 0.6, start = ctx.currentTime + 0.5, N = 10, clicks = [], samples = [];
+    for (let i = 0; i < N; i++) { clicks.push(start + i * bs); sgClick(ctx, start + i * bs, i === 0); }
+    btn.disabled = true; $("sgState").textContent = "校準中：戴耳機，跟著每一聲「答」念「哒」（共 10 拍）";
+    const timer = setInterval(() => {
+      an.getFloatTimeDomainData(buf);
+      let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      samples.push({ t: ctx.currentTime - lag, rms: Math.sqrt(sum / buf.length) });
+    }, 10);
+    await new Promise((r) => setTimeout(r, (0.5 + N * bs + 0.6) * 1000));
+    clearInterval(timer);
+    stream.getTracks().forEach((t) => t.stop()); ctx.close();
+    btn.disabled = false; $("sgState").textContent = "準備好了";
+    const lat = sgCalcLat(samples, clicks);
+    if (lat == null) { err.textContent = "沒量到足夠的聲音：請戴耳機、靠近麥克風，每一拍清楚地念「哒」，再校準一次"; return; }
+    $("sgLat").value = lat;
+    $("sgInfo").textContent = `校準完成：延遲補償設為 ${lat} 毫秒。之後錄音會自動套用；已有錄音的話按「重新轉換」即可。`;
   }
 
   async function sgStart() {
@@ -1721,6 +1785,7 @@ input[type=file]{display:none}
     $("sgGo").addEventListener("click", sgStart);
     $("sgStop").addEventListener("click", sgStop);
     $("sgAgain").addEventListener("click", sgConvert);
+    $("sgCal").addEventListener("click", sgCalibrate);
     $("sgClick").addEventListener("click", async () => {
       const AC = window.AudioContext || window.webkitAudioContext;
       const ctx = new AC();
@@ -1728,7 +1793,7 @@ input[type=file]{display:none}
       for (let i = 0; i < cfg.beats * 2; i++) sgClick(ctx, t + i * bs, i % cfg.beats === 0);
       setTimeout(() => ctx.close(), (cfg.beats * 2 * bs + 0.5) * 1000);
     });
-    window.__sg = { sgBuild, sgPitch, sgSegment };
+    window.__sg = { sgBuild, sgPitch, sgSegment, sgCalcLat };
   })();
 
 
