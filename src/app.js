@@ -317,8 +317,32 @@
     const vfKey = (MAJOR_BY_FIFTHS[info.fifths]);
     const minorKey = info.minor ? MINOR_BY_FIFTHS[info.fifths] + "m" : vfKey;
 
-    for (let r = 0; r * perRow < measures.length; r++) {
-      const row = measures.slice(r * perRow, r * perRow + perRow);
+    // 依簡譜字級與歌詞寬度預先算出每小節所需寬度，太擠時自動少放幾個小節（「每行小節數」為上限）
+    const left = num("sideMargin", 14, 0, 60), usable = W - 2 * left;
+    const firstExtra = showStaff ? 60 : 0; // 只留簡譜時不需要為譜號留空間
+    const FS = Math.max(10, Math.min(36, parseFloat($("fontSize").value) || 17));
+    measures.forEach((m) => m.notes.forEach((n) => {
+      n.lab = n.rest ? { text: "0", acc: "", oct: 0 } : labelOf(n.pitch, kind, mode, m.fifths, info.minor, minorMode);
+      n.hw = n.lab.text.length * 0.28 * FS;
+      n.wd = 2 * n.hw + (n.lab.acc ? 0.4 * FS : 0);
+      n.lw = 0;
+      if (showLyrics) (n.ly || []).forEach((l) => { if (l && l.text) { let w = 0; for (const ch of l.text) w += CJK.test(ch) ? LFS : 0.55 * LFS; n.lw = Math.max(n.lw, w + (l.hy ? 0.5 * LFS : 0)); } });
+    }));
+    const gapFor = (a, b2) => Math.max((a.dur < 1 - 1e-9 ? 0.95 : 0.9) * FS, Math.max(a.wd, a.lw) / 2 + Math.max(b2.wd, b2.lw) / 2 + 0.3 * FS);
+    const needOf = (m) => { let t = FS * 1.6; m.notes.forEach((n, i) => { if (i > 0) t += gapFor(m.notes[i - 1], n); }); return t; };
+    const rowsList = [];
+    let curRow = [], curSum = 0;
+    measures.forEach((m, gi) => {
+      const nd = needOf(m) + (curRow.length === 0 ? firstExtra : 0);
+      if (curRow.length && (curRow.length >= perRow || curSum + nd > usable)) { rowsList.push(curRow); curRow = []; curSum = 0; }
+      curRow.push(gi);
+      curSum += curRow.length === 1 ? needOf(m) + firstExtra : nd;
+    });
+    if (curRow.length) rowsList.push(curRow);
+
+    for (let r = 0; r < rowsList.length; r++) {
+      const row = rowsList[r].map((i) => measures[i]);
+      const r0 = rowsList[r][0];
       const div = document.createElement("div");
       div.className = "row";
       div.style.marginBottom = num("rowGap", 4, 0, 60) + "px";
@@ -332,21 +356,9 @@
       svg.removeAttribute("width"); svg.removeAttribute("height");
       svg.style.width = "100%"; svg.style.height = "auto";
 
-      const left = num("sideMargin", 14, 0, 60), usable = W - 2 * left;
-      const firstExtra = showStaff ? 60 : 0; // 只留簡譜時不需要為譜號留空間
       const unit = (usable - firstExtra) / row.length;
       const staveY = 38;
-      const FS = Math.max(10, Math.min(36, parseFloat($("fontSize").value) || 17));
       const k = FS / 17;
-      // 依簡譜字級決定每小節所需寬度，字大時自動加寬該小節
-      row.forEach((m) => m.notes.forEach((n) => {
-        n.lab = n.rest ? { text: "0", acc: "", oct: 0 } : labelOf(n.pitch, kind, mode, m.fifths, info.minor, minorMode);
-        n.hw = n.lab.text.length * 0.28 * FS;
-        n.wd = 2 * n.hw + (n.lab.acc ? 0.4 * FS : 0);
-        n.lw = 0;
-        if (showLyrics) (n.ly || []).forEach((l) => { if (l && l.text) { let w = 0; for (const ch of l.text) w += CJK.test(ch) ? LFS : 0.55 * LFS; n.lw = Math.max(n.lw, w + (l.hy ? 0.5 * LFS : 0)); } });
-      }));
-      const gapFor = (a, b2) => Math.max((a.dur < 1 - 1e-9 ? 0.95 : 0.9) * FS, Math.max(a.wd, a.lw) / 2 + Math.max(b2.wd, b2.lw) / 2 + 0.3 * FS);
       const need = row.map((m, mi) => {
         let t = FS * 1.6 + (mi === 0 ? firstExtra : 0);
         m.notes.forEach((n, i) => { if (i > 0) t += gapFor(m.notes[i - 1], n); });
@@ -367,7 +379,7 @@
       const FONT = "'Noto Sans TC','Noto Sans CJK TC','Microsoft JhengHei','PingFang TC',sans-serif";
 
       row.forEach((m, mi) => {
-        const gi = r * perRow + mi;
+        const gi = r0 + mi;
         const w = wArr[mi];
         const stave = new VF.Stave(x, staveY, w);
         const barPad = num("barPad", 0, 0, 40);
@@ -486,7 +498,7 @@
       const jpStart = bars[0].startX - 5 - num("barPad", 0, 0, 40);
       line(jpStart + 0.6, barTop, jpStart + 0.6, barBot, 1.2);
       bars.forEach((b, bi) => {
-        const last = r * perRow + bi === measures.length - 1;
+        const last = r0 + bi === measures.length - 1;
         if (last) { line(b.x1 - 4.5, barTop, b.x1 - 4.5, barBot, 1.2); line(b.x1 - 0.8, barTop, b.x1 - 0.8, barBot, 3); }
         else line(b.x1, barTop, b.x1, barBot, 1.2);
       });
@@ -507,7 +519,7 @@
           svg.insertBefore(rc, g);
           n.hl = rc;
         });
-        const gm = measures[r * perRow + bi];
+        const gm = measures[r0 + bi];
         const fif = gm.fifths;
         const levelsOf = (n) => (n.dur >= 1 - 1e-9 ? 0 : n.dur <= 0.25 + 1e-9 ? 2 : 1);
         // digits
