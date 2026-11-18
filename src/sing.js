@@ -121,8 +121,8 @@
     const notes = sgSegment(frames, cfg.stab);
     if (!notes.length) throw new Error("沒有偵測到歌聲：請靠近麥克風、環境安靜，音量大一點再試一次");
     // 整體音準偏移校正（中位數）
-    const off = sgMedian(notes.map((n) => n.midi - Math.round(n.midi)));
-    notes.forEach((n) => (n.midi += cfg.octave - (Math.abs(off) < 0.45 ? off : 0)));
+    const off = cfg.tune != null ? cfg.tune : sgMedian(notes.map((n) => n.midi - Math.round(n.midi)));
+    notes.forEach((n) => (n.midi += cfg.octave - (Math.abs(off) <= 0.45 ? off : 0)));
     // 調性
     let fifths, minor = false;
     if (cfg.key === "auto") {
@@ -191,7 +191,7 @@
     return {
       beats: g("sgBeats", 4, 1, 16), beatType: parseInt($("sgBeatType").value) || 4, bpm: g("sgBpm", 80, 30, 240),
       countIn: g("sgCount", 1, 0, 4), minUnit: parseInt($("sgMin").value) || 2, key: $("sgKey").value, snap: $("sgSnap").checked,
-      octave: parseInt($("sgOct").value) || 0, stab: g("sgStab", 3, 1, 5), lat: parseFloat($("sgLat").value) || 0,
+      octave: parseInt($("sgOct").value) || 0, stab: g("sgStab", 3, 1, 5), tune: sgCal ? sgCal.tune : null, lat: parseFloat($("sgLat").value) || 0,
     };
   }
 
@@ -254,30 +254,31 @@
     o.start(t); o.stop(t + 0.08);
   }
 
-  // 由量到的音量曲線找出每次「哒」的起音，與節拍器時間比對，得到延遲（毫秒）
-  function sgCalcLat(samples, clicks) {
-    if (samples.length < 20) return null;
-    const mx = Math.max(...samples.map((x) => x.rms));
-    const thr = Math.max(0.02, 0.3 * mx);
-    const ons = [];
-    let quiet = 0;
-    samples.forEach((x, i) => {
-      if (x.rms < thr * 0.6) quiet = x.t;
-      else if (x.rms >= thr && x.t - quiet < 0.2 && (!ons.length || x.t - ons[ons.length - 1] > 0.25) && quiet > 0) ons.push(x.t);
-    });
-    const diffs = [];
-    clicks.slice(2).forEach((c) => {
-      let best = null;
-      ons.forEach((o) => { if (Math.abs(o - c) < 0.3 && (best == null || Math.abs(o - c) < Math.abs(best - c))) best = o; });
-      if (best != null) diffs.push((best - c) * 1000);
-    });
-    if (diffs.length < 3) return null;
-    return Math.round(Math.max(-300, Math.min(300, sgMedian(diffs))));
+  // ---- 校準：預備 4 拍後，一拍一個音唱 C D E F G A B（哆來咪發嗦啦西）----
+  // 量三件事：延遲（每個音起音 vs 節拍）、音準偏移（整體偏高或偏低多少）、你唱的「哆」落在哪個音（決定調性）
+  const SG_CAL_STEPS = [0, 2, 4, 5, 7, 9, 11], SG_CAL_NAMES = ["C", "D", "E", "F", "G", "A", "B"], SG_CAL_COUNT = 4;
+  function sgAnalyzeCal(frames, start, bs) {
+    const notes = sgSegment(frames, 3);
+    if (notes.length < 7) return { err: `只偵測到 ${notes.length} 個音（需要 7 個）：每個音唱滿一拍，音與音之間稍微斷一下，戴耳機、靠近麥克風再試一次` };
+    let best = null;
+    for (let a = 0; a + 7 <= notes.length; a++) {
+      const w = notes.slice(a, a + 7);
+      const base = Math.round(w[0].midi);
+      const sc = w.reduce((t, n, k) => t + Math.abs(n.midi - base - SG_CAL_STEPS[k]), 0);
+      if (!best || sc < best.sc) best = { sc, w, base };
+    }
+    if (best.sc > 7 * 0.9) return { err: "唱的音階和 C D E F G A B（哆來咪發嗦啦西）對不上：請照畫面提示，每拍唱一個音，由低往高" };
+    const lats = best.w.map((n, k) => (n.start - (start + (SG_CAL_COUNT + k) * bs)) * 1000);
+    const lat = Math.round(Math.max(-400, Math.min(400, sgMedian(lats))));
+    const tune = sgMedian(best.w.map((n, k) => n.midi - (best.base + SG_CAL_STEPS[k])));
+    const tonic = ((best.base % 12) + 12) % 12;
+    return { lat, tune: Math.max(-0.45, Math.min(0.45, tune)), tonic, base: best.base };
   }
+  const sgFifthsOfTonic = (t) => ((t * 7 + 6) % 12 + 12) % 12 - 6;
 
   async function sgCalibrate() {
     const err = $("sgErr"), btn = $("sgCal");
-    err.textContent = "";
+    err.textContent = ""; $("sgInfo").textContent = "";
     if (sgRec) return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { err.textContent = "這個瀏覽器不支援麥克風錄音（需要 https 網址）"; return; }
     let stream;
@@ -286,26 +287,55 @@
     const AC = window.AudioContext || window.webkitAudioContext;
     const ctx = new AC();
     if (ctx.state === "suspended") await ctx.resume();
-    const an = ctx.createAnalyser(); an.fftSize = 1024;
+    const an = ctx.createAnalyser(); an.fftSize = 2048;
     ctx.createMediaStreamSource(stream).connect(an);
     const buf = new Float32Array(an.fftSize);
     const lag = an.fftSize / 2 / ctx.sampleRate + (ctx.baseLatency || 0);
-    const bs = 0.6, start = ctx.currentTime + 0.5, N = 10, clicks = [], samples = [];
-    for (let i = 0; i < N; i++) { clicks.push(start + i * bs); sgClick(ctx, start + i * bs, i === 0); }
-    btn.disabled = true; $("sgState").textContent = "校準中：戴耳機，跟著每一聲「答」念「哒」（共 10 拍）";
+    const bs = 1.0, start = ctx.currentTime + 0.6, total = SG_CAL_COUNT + 7;
+    for (let i = 0; i < total; i++) sgClick(ctx, start + i * bs, i === 0 || i === SG_CAL_COUNT);
+    btn.disabled = true; $("sgGo").disabled = true;
+    $("sgState").textContent = "校準中：戴耳機，預備拍後一拍唱一個音「啦」";
+    const raw = [];
     const timer = setInterval(() => {
       an.getFloatTimeDomainData(buf);
       let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-      samples.push({ t: ctx.currentTime - lag, rms: Math.sqrt(sum / buf.length) });
-    }, 10);
-    await new Promise((r) => setTimeout(r, (0.5 + N * bs + 0.6) * 1000));
+      const rms = Math.sqrt(sum / buf.length);
+      let midi = null;
+      if (rms > 0.012) { const p = sgPitch(buf, ctx.sampleRate); if (p && p.clarity >= 0.9 && p.f > 70 && p.f < 1100) midi = sgMidi(p.f); }
+      const now = ctx.currentTime;
+      raw.push({ t: now - lag, midi, rms });
+      const k = Math.floor((now - start) / bs);
+      if (now < start) { $("sgNote").textContent = "預備"; $("sgSub").textContent = "跟著節拍，預備拍後開始唱"; }
+      else if (k < SG_CAL_COUNT) { $("sgNote").textContent = String(SG_CAL_COUNT - k); $("sgSub").textContent = "預備拍"; }
+      else if (k < total) { $("sgNote").textContent = SG_CAL_NAMES[k - SG_CAL_COUNT]; $("sgSub").textContent = "唱「啦」，這一拍唱這個音（哆來咪發嗦啦西）"; }
+      else { $("sgNote").textContent = "–"; $("sgSub").textContent = ""; }
+    }, 16);
+    await new Promise((r) => setTimeout(r, (0.6 + total * bs + 0.5) * 1000));
     clearInterval(timer);
     stream.getTracks().forEach((t) => t.stop()); ctx.close();
-    btn.disabled = false; $("sgState").textContent = "準備好了";
-    const lat = sgCalcLat(samples, clicks);
-    if (lat == null) { err.textContent = "沒量到足夠的聲音：請戴耳機、靠近麥克風，每一拍清楚地念「哒」，再校準一次"; return; }
-    $("sgLat").value = lat;
-    $("sgInfo").textContent = `校準完成：延遲補償設為 ${lat} 毫秒。之後錄音會自動套用；已有錄音的話按「重新轉換」即可。`;
+    btn.disabled = false; $("sgGo").disabled = false; $("sgState").textContent = "準備好了";
+    const frames = [];
+    let k = 0;
+    for (let t = start - 0.25; t <= raw[raw.length - 1].t; t += SG_HOP) {
+      while (k + 1 < raw.length && Math.abs(raw[k + 1].t - t) <= Math.abs(raw[k].t - t)) k++;
+      const s = raw[k], ok = s && Math.abs(s.t - t) < 0.05;
+      frames.push({ t, midi: ok ? s.midi : null, rms: ok ? s.rms : 0 });
+    }
+    const r = sgAnalyzeCal(frames, start, bs);
+    if (r.err) { err.textContent = r.err; return; }
+    const fifths = sgFifthsOfTonic(r.tonic);
+    sgCal = { lat: r.lat, tune: r.tune, key: fifths + "M" };
+    store.set("sgCal", JSON.stringify(sgCal));
+    sgApplyCal();
+    const nm = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"][r.tonic];
+    $("sgInfo").textContent = `校準完成：延遲 ${r.lat} 毫秒、音準偏${r.tune >= 0 ? "高" : "低"} ${Math.round(Math.abs(r.tune) * 100)} 音分、你唱的「哆」是 ${nm}（調性已設為 ${nm} 大調）。之後錄音自動套用；已有錄音可按「重新轉換」。` +
+      (r.tonic !== 0 ? " 注意：你不是唱在 C，簡譜若要數字跟著你唱的音，請把「顯示」的簡譜模式改成首調。" : "");
+  }
+  let sgCal = null;
+  function sgApplyCal() {
+    if (!sgCal) return;
+    $("sgLat").value = sgCal.lat;
+    $("sgKey").value = sgCal.key;
   }
 
   async function sgStart() {
@@ -414,5 +444,6 @@
       for (let i = 0; i < cfg.beats * 2; i++) sgClick(ctx, t + i * bs, i % cfg.beats === 0);
       setTimeout(() => ctx.close(), (cfg.beats * 2 * bs + 0.5) * 1000);
     });
-    window.__sg = { sgBuild, sgPitch, sgSegment, sgCalcLat };
+    try { sgCal = JSON.parse(store.get("sgCal") || "null"); sgApplyCal(); } catch (e) {}
+    window.__sg = { sgBuild, sgPitch, sgSegment, sgAnalyzeCal };
   })();
