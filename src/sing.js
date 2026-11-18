@@ -48,53 +48,68 @@
 
   // ---- 轉換：取樣序列 → 音符事件 ----
   // frames: [{t, midi|null}]（t：相對於第 1 小節開頭的秒數，固定間隔 SG_HOP）
-  function sgSegment(frames) {
+  // 切音：以「滯後 + 音量起伏」取代逐格四捨五入，長音顫動不會被切碎，同音重複靠音量下凹分開
+  function sgSegment(frames, stab) {
+    stab = Math.max(1, Math.min(5, stab || 3));
     const n = frames.length;
-    // 1. 中位數平滑（5 點）
     const sm = frames.map((f, i) => {
       if (f.midi == null) return null;
       const w = [];
-      for (let k = i - 2; k <= i + 2; k++) if (k >= 0 && k < n && frames[k].midi != null) w.push(frames[k].midi);
+      for (let k = i - 3; k <= i + 3; k++) if (k >= 0 && k < n && frames[k].midi != null) w.push(frames[k].midi);
       return sgMedian(w);
     });
-    // 2. 取到最近半音，短空洞（≤2 格）且前後同音則補起來
-    let val = sm.map((m) => (m == null ? null : Math.round(m)));
+    const sr = frames.map((f, i) => { let a = 0, c = 0; for (let k = i - 2; k <= i + 2; k++) if (k >= 0 && k < n) { a += frames[k].rms || 0; c++; } return a / c; });
+    const th = 0.55 + 0.1 * stab;                 // 偏離目前音多少半音才算換音
+    const minF = Math.round(2 + 1.5 * stab);      // 新音至少維持幾格（每格 20 ms）
+    const gapMax = 6 + 2 * stab;                  // 音高偵測不到多久才算休止
+    const dip = Math.max(0.3, Math.min(0.75, 0.55 - 0.07 * (stab - 3))); // 音量掉到最大值的幾成算「斷開」
+    const out = [];
+    const close = (c, e) => { if (e > c.s) out.push({ s: c.s, e, midi: sgMedian(c.vals) }); };
+    let cur = null, pend = [], gap = 0;
+    const mk = (s, vals, r) => ({ s, vals, rmsMax: r, low: 0 });
     for (let i = 0; i < n; i++) {
-      if (val[i] != null) continue;
-      let j = i;
-      while (j < n && val[j] == null) j++;
-      if (i > 0 && j < n && j - i <= 2 && val[i - 1] === val[j]) for (let k = i; k < j; k++) val[k] = val[j];
-      i = j;
-    }
-    // 3. 分段，過短（< 3 格）的段落併入前一段
-    const runs = [];
-    val.forEach((v, i) => {
-      const last = runs[runs.length - 1];
-      if (last && last.v === v) last.e = i + 1;
-      else runs.push({ v, s: i, e: i + 1 });
-    });
-    for (let pass = 0; pass < 2; pass++) {
-      for (let i = 0; i < runs.length; i++) {
-        if (runs[i].e - runs[i].s < 3 && runs.length > 1) {
-          const tgt = i > 0 ? runs[i - 1] : runs[i + 1];
-          if (i > 0) tgt.e = runs[i].e; else tgt.s = runs[i].s;
-          runs.splice(i, 1); i--;
-          for (let k = 1; k < runs.length; k++) if (runs[k].v === runs[k - 1].v) { runs[k - 1].e = runs[k].e; runs.splice(k, 1); k--; }
-        }
+      const m = sm[i];
+      if (m == null) {
+        if (cur && ++gap > gapMax) { close(cur, i - gap + 1 - cur.low); cur = null; pend = []; gap = 0; }
+        continue;
       }
+      gap = 0;
+      if (!cur) { cur = mk(i, [m], sr[i]); continue; }
+      const c = sgMedian(cur.vals.slice(-20));
+      if (Math.abs(m - c) > th) {
+        pend.push(i);
+        if (pend.length >= minF) {
+          const pv = pend.map((k) => sm[k]), pm = sgMedian(pv);
+          if (pv.every((v) => Math.abs(v - pm) <= th)) {
+            close(cur, pend[0]);
+            cur = mk(pend[0], pv, Math.max(...pend.map((k) => sr[k])));
+            pend = [];
+          } else pend.shift();
+        }
+        continue;
+      }
+      pend = [];
+      if (sr[i] > cur.rmsMax) cur.rmsMax = sr[i];
+      if (sr[i] < cur.rmsMax * dip) cur.low++;
+      else if (cur.low >= 3) {
+        if (sr[i] > cur.rmsMax * Math.min(0.9, dip + 0.25)) { close(cur, i - cur.low); cur = mk(i, [m], sr[i]); continue; }
+      } else cur.low = 0;
+      cur.vals.push(m);
     }
-    // 4. 每段取原始音高的中位數
-    return runs.filter((r) => r.v != null).map((r) => {
-      const fl = [];
-      for (let i = r.s; i < r.e; i++) if (frames[i].midi != null) fl.push(frames[i].midi);
-      return { start: frames[r.s].t, end: frames[r.e - 1].t + SG_HOP, midi: fl.length ? sgMedian(fl) : r.v };
+    if (cur) close(cur, n - gap - cur.low);
+    // 過短的碎音：併入前一個音（間隔很小時），否則丟掉
+    const res = [];
+    out.forEach((o) => {
+      if (o.e - o.s < Math.max(3, minF - 2)) { const p = res[res.length - 1]; if (p && o.s - p.e <= 3) p.e = o.e; return; }
+      res.push(o);
     });
+    return res.map((r) => ({ start: frames[r.s].t, end: frames[Math.min(n, r.e) - 1].t + SG_HOP, midi: r.midi }));
   }
 
   const sgScalePcs = (fifths) => { const tonic = (((fifths * 7) % 12) + 12) % 12; return new Set([0, 2, 4, 5, 7, 9, 11].map((d) => (d + tonic) % 12)); };
 
   function sgBuild(frames, cfg) {
-    const notes = sgSegment(frames);
+    const notes = sgSegment(frames, cfg.stab);
     if (!notes.length) throw new Error("沒有偵測到歌聲：請靠近麥克風、環境安靜，音量大一點再試一次");
     // 整體音準偏移校正（中位數）
     const off = sgMedian(notes.map((n) => n.midi - Math.round(n.midi)));
@@ -151,7 +166,8 @@
       for (let t = t0; t <= tEnd; t += SG_HOP) {
         while (k + 1 < raw.length && Math.abs(raw[k + 1].t - t) <= Math.abs(raw[k].t - t)) k++;
         const s = raw[k];
-        frames.push({ t: t - t0, midi: s && Math.abs(s.t - t) < 0.05 ? s.midi : null });
+        const ok = s && Math.abs(s.t - t) < 0.05;
+        frames.push({ t: t - t0, midi: ok ? s.midi : null, rms: ok ? s.rms : 0 });
       }
       const r = sgBuild(frames, cfg);
       const xml = buildMusicXml({ title: $("sgTitle").value.trim(), fifths: r.fifths, minor: r.minor, beats: cfg.beats, beatType: cfg.beatType, tempo: cfg.bpm, clef: r.clef, events: r.events });
@@ -166,7 +182,7 @@
     return {
       beats: g("sgBeats", 4, 1, 16), beatType: parseInt($("sgBeatType").value) || 4, bpm: g("sgBpm", 80, 30, 240),
       countIn: g("sgCount", 1, 0, 4), minUnit: parseInt($("sgMin").value) || 2, key: $("sgKey").value, snap: $("sgSnap").checked,
-      octave: parseInt($("sgOct").value) || 0, lat: parseFloat($("sgLat").value) || 0,
+      octave: parseInt($("sgOct").value) || 0, stab: g("sgStab", 3, 1, 5), lat: parseFloat($("sgLat").value) || 0,
     };
   }
 
@@ -273,7 +289,7 @@
         const p = sgPitch(buf, ctx.sampleRate);
         if (p && p.clarity >= 0.9 && p.f > 70 && p.f < 1100) { midi = sgMidi(p.f); f = p.f; cl = p.clarity; }
       }
-      rec.samples.push({ t: now - lag, midi });
+      rec.samples.push({ t: now - lag, midi, rms });
       sgLive(rec, now, midi, rms, cl);
     }, 16));
     $("sgGo").hidden = true; $("sgStop").hidden = false;
