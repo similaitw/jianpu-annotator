@@ -90,7 +90,7 @@ docker compose -f docker-compose.tunnel.yml logs cloudflared-quick     # 找 htt
 ```
 python3 build.py     # src/ + vendor/ → index.html
 ```
-- `src/app.js` 程式、`src/template.html` 版面、`src/sample.musicxml` 範例（小星星，公有領域）
+- `src/app.js` 程式、`src/template.html` 版面、`src/sample.musicxml` 範例（卡農，帕海貝爾，公有領域；旋律依和聲簡化改寫）
 - `vendor/vexflow-bravura.js` VexFlow 4.2.5（含字型）
 - `index.html` 是建置結果，已提交，Vercel 直接當靜態網站部署
 
