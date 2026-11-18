@@ -738,6 +738,7 @@
   const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
   /* @@include compose.js */
   /* @@include layout.js */
+  /* @@include sing.js */
 
   // ---------- UI ----------
   function applyInfoToFields() {

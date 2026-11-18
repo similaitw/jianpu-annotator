@@ -32,6 +32,20 @@ input[type=file]{display:none}
 .chk2{flex-direction:row;align-items:center;gap:6px;font-size:14px;color:#1b2430;padding-bottom:6px}
 .err{color:#b42318;font-size:13px;margin-left:8px}
 @media print{.tools{display:none}}
+.sg-live{text-align:center}
+.sg-note{font-size:56px;font-weight:800;line-height:1.1;color:#111}
+.sg-sub{color:#445;font-size:15px;min-height:22px}
+.sg-dots{display:flex;gap:10px;justify-content:center;margin:8px 0;min-height:18px}
+.sg-dots i{width:16px;height:16px;border-radius:50%;background:#d5dbe2;display:block}
+.sg-dots i.on{background:#2563eb}
+.sg-meter{height:6px;background:#e5e9ee;border-radius:3px;overflow:hidden;margin:6px 0}
+.sg-meter div{height:100%;width:0;background:#2a9d4a}
+#sgCanvas{width:100%;height:90px;border-radius:6px;display:block}
+.sg-state{margin:6px 0;color:#445;font-size:14px}
+.sg-bar{position:sticky;bottom:0;background:#fff;padding:8px 0;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;border-top:1px solid #eef0f3}
+.sg-big{min-width:150px;height:52px;font-size:18px;font-weight:700;border-radius:26px}
+.sg-big.stop{background:#c0392b;border-color:#c0392b}
+.sg-msg{font-size:14px;color:#1b5e20;margin:4px 0}
 .hint{font-size:12px;color:#667;width:100%}
 .page{width:210mm;max-width:100%;margin:18px auto;background:#fff;padding:14mm 12mm;box-shadow:0 2px 12px rgba(0,0,0,.12)}
 .head{text-align:center;margin-bottom:6px}
@@ -99,6 +113,36 @@ input[type=file]{display:none}
 <button id="midiGo" type="button">轉換並載入</button> <button id="midiCancel" class="alt" type="button">取消</button>
 <span id="midiErr" class="err"></span>
 </div>
+<details id="singPanel" class="panel"><summary>唱歌輸入（跟著節拍器唱，轉成譜）</summary>
+<div class="sg-live">
+<div class="sg-note" id="sgNote">–</div>
+<div class="sg-sub" id="sgSub">按「開始錄音」後跟著節拍器唱</div>
+<div class="sg-dots" id="sgDots"></div>
+<div class="sg-meter"><div id="sgLevel"></div></div>
+<canvas id="sgCanvas"></canvas>
+<div class="sg-state" id="sgState">準備好了</div>
+</div>
+<div class="sg-bar">
+<button id="sgGo" type="button" class="sg-big">● 開始錄音</button>
+<button id="sgStop" type="button" class="sg-big stop" hidden>■ 停止並轉換</button>
+<button id="sgClick" type="button" class="alt">試聽節拍</button>
+<button id="sgAgain" type="button" class="alt" disabled>重新轉換</button>
+</div>
+<div class="grid">
+<label>拍號<span class="inl"><input id="sgBeats" type="number" min="1" max="16" value="4"> / <select id="sgBeatType"><option>4</option><option>8</option><option>2</option></select></span></label>
+<label>速度（每分鐘幾個四分音符）<input id="sgBpm" type="number" min="30" max="240" value="80"></label>
+<label>預備拍（小節）<input id="sgCount" type="number" min="0" max="4" value="1"></label>
+<label>最短音符<select id="sgMin"><option value="2">八分音符</option><option value="1">十六分音符</option></select></label>
+<label>調性<select id="sgKey"></select></label>
+<label class="chk2"><input id="sgSnap" type="checkbox" checked> 音高吸附到調內音</label>
+<label>八度<select id="sgOct"><option value="0">不移</option><option value="12">升一個八度（男聲）</option><option value="-12">降一個八度</option></select></label>
+<label>延遲補償（毫秒）<input id="sgLat" type="number" min="-300" max="300" step="10" value="0"></label>
+<label>標題<input id="sgTitle" type="text" placeholder="例：我唱的旋律"></label>
+</div>
+<div class="hint" style="margin:4px 0;line-height:1.7">建議<b>戴耳機</b>，避免節拍聲被麥克風收進去。用「啦」或「嗚」單一母音唱，每個音之間稍微斷開，同音連唱（1 1）時換氣或輕輕斷一下。錄完會自動轉成樂譜載入下方；節奏切歪時，先試「最短音符」選八分、速度調慢，或調整「延遲補償」，不用重唱，按「重新轉換」即可。
+所有處理都在你的瀏覽器內完成，錄音不會上傳。</div>
+<div class="sg-msg" id="sgInfo"></div><span id="sgErr" class="err"></span>
+</details>
 <details id="layPanel" class="panel"><summary>版面設定</summary>
 <div class="grid">
 <label>預設組<select id="layPreset"></select></label>

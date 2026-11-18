@@ -5,6 +5,6 @@ root = pathlib.Path(__file__).parent
 rd = lambda p: (root / p).read_text(encoding="utf-8")
 vf = rd("vendor/vexflow-bravura.js").replace("</script", "<\\/script")
 sample = "window.SAMPLE_XML=" + json.dumps(rd("src/sample.musicxml"), ensure_ascii=False).replace("</", "<\\/") + ";"
-html = rd("src/template.html").replace("%%VEXFLOW%%", vf).replace("%%SAMPLE%%", sample).replace("%%APP%%", rd("src/app.js").replace("/* @@include compose.js */", rd("src/compose.js")).replace("/* @@include layout.js */", rd("src/layout.js")))
+html = rd("src/template.html").replace("%%VEXFLOW%%", vf).replace("%%SAMPLE%%", sample).replace("%%APP%%", rd("src/app.js").replace("/* @@include compose.js */", rd("src/compose.js")).replace("/* @@include layout.js */", rd("src/layout.js")).replace("/* @@include sing.js */", rd("src/sing.js")))
 (root / "index.html").write_text(html, encoding="utf-8")
 print("index.html", len(html), "bytes")
